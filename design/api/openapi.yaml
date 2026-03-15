@@ -1,0 +1,388 @@
+openapi: 3.1.0
+info:
+  title: OfferYou MVP API
+  version: 0.1.0
+  description: |
+    简历助手重制（MVP）接口草案。
+    覆盖四个核心接口：优化任务创建、优化结果查询、导出简历、投递记录。
+servers:
+  - url: https://api.offeryou.local
+    description: Local/Dev server
+tags:
+  - name: Resume
+    description: 简历优化相关接口
+  - name: Export
+    description: 导出相关接口
+  - name: Application
+    description: 投递记录相关接口
+paths:
+  /api/v1/resume/optimize:
+    post:
+      tags: [Resume]
+      summary: 创建优化任务
+      operationId: createOptimizeTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOptimizeTaskRequest'
+      responses:
+        '202':
+          description: 任务已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateOptimizeTaskResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/resume/optimize/{task_id}:
+    get:
+      tags: [Resume]
+      summary: 查询优化任务状态与结果
+      operationId: getOptimizeTask
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功（可能是处理中或已完成）
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/OptimizeTaskRunningResponse'
+                  - $ref: '#/components/schemas/OptimizeTaskSucceededResponse'
+        '404':
+          description: 任务不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/resume/export:
+    post:
+      tags: [Export]
+      summary: 导出优化后简历
+      operationId: exportResume
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportResumeRequest'
+      responses:
+        '200':
+          description: 导出成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResumeResponse'
+        '400':
+          description: 导出参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/applications:
+    post:
+      tags: [Application]
+      summary: 创建投递记录
+      operationId: createApplication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApplicationRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateApplicationResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    CandidateProfile:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        location:
+          type: string
+        summary:
+          type: string
+
+    ResumeSource:
+      type: object
+      additionalProperties: false
+      required: [mode, content]
+      properties:
+        mode:
+          type: string
+          enum: [file, manual]
+        file_type:
+          type: string
+          enum: [pdf, docx, txt, image]
+        content:
+          type: string
+          minLength: 200
+        raw_file_ref:
+          type: string
+
+    JobDescription:
+      type: object
+      additionalProperties: false
+      required: [mode, content]
+      properties:
+        mode:
+          type: string
+          enum: [text, image]
+        content:
+          type: string
+          minLength: 120
+        lang_hint:
+          type: string
+          enum: [zh, en, auto]
+          default: auto
+
+    OptimizeOptions:
+      type: object
+      additionalProperties: false
+      properties:
+        target_tone:
+          type: string
+          enum: [professional, concise, impact]
+        target_length:
+          type: string
+          enum: [one_page, flexible]
+        must_keep:
+          type: array
+          items:
+            type: string
+
+    CreateOptimizeTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [candidate_profile, resume_source, job_description]
+      properties:
+        candidate_profile:
+          $ref: '#/components/schemas/CandidateProfile'
+        resume_source:
+          $ref: '#/components/schemas/ResumeSource'
+        job_description:
+          $ref: '#/components/schemas/JobDescription'
+        optimize_options:
+          $ref: '#/components/schemas/OptimizeOptions'
+
+    CreateOptimizeTaskResponse:
+      type: object
+      additionalProperties: false
+      required: [task_id, status, estimated_seconds]
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+          enum: [queued]
+        estimated_seconds:
+          type: integer
+          minimum: 1
+
+    RewriteSuggestion:
+      type: object
+      additionalProperties: false
+      required: [section, before, after, reason]
+      properties:
+        section:
+          type: string
+        before:
+          type: string
+        after:
+          type: string
+        reason:
+          type: string
+
+    OptimizationReport:
+      type: object
+      additionalProperties: false
+      required: [match_score, strengths, gaps, rewrite_suggestions, keywords_to_add, risk_notes]
+      properties:
+        match_score:
+          type: number
+          minimum: 0
+          maximum: 100
+        strengths:
+          type: array
+          items:
+            type: string
+        gaps:
+          type: array
+          items:
+            type: string
+        rewrite_suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RewriteSuggestion'
+        keywords_to_add:
+          type: array
+          items:
+            type: string
+        risk_notes:
+          type: array
+          items:
+            type: string
+
+    ResumeSection:
+      type: object
+      additionalProperties: false
+      required: [name, text]
+      properties:
+        name:
+          type: string
+        text:
+          type: string
+
+    RefinedResume:
+      type: object
+      additionalProperties: false
+      required: [content, sections, page_estimate]
+      properties:
+        content:
+          type: string
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResumeSection'
+        page_estimate:
+          type: integer
+          minimum: 1
+
+    OptimizeTaskRunningResponse:
+      type: object
+      additionalProperties: false
+      required: [task_id, status, progress]
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+          enum: [running]
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    OptimizeTaskSucceededResponse:
+      type: object
+      additionalProperties: false
+      required: [task_id, status, optimization_report, refined_resume]
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+          enum: [succeeded]
+        optimization_report:
+          $ref: '#/components/schemas/OptimizationReport'
+        refined_resume:
+          $ref: '#/components/schemas/RefinedResume'
+
+    ExportResumeRequest:
+      type: object
+      additionalProperties: false
+      required: [task_id, format, content]
+      properties:
+        task_id:
+          type: string
+        format:
+          type: string
+          enum: [pdf, docx, txt]
+        content:
+          type: string
+
+    ExportResumeResponse:
+      type: object
+      additionalProperties: false
+      required: [export_id, status, download_url]
+      properties:
+        export_id:
+          type: string
+        status:
+          type: string
+          enum: [ready]
+        download_url:
+          type: string
+
+    CreateApplicationRequest:
+      type: object
+      additionalProperties: false
+      required: [task_id, company, job_title, resume_export_id, applied_at]
+      properties:
+        task_id:
+          type: string
+        company:
+          type: string
+        job_title:
+          type: string
+        resume_export_id:
+          type: string
+        applied_at:
+          type: string
+          format: date-time
+
+    CreateApplicationResponse:
+      type: object
+      additionalProperties: false
+      required: [application_id, status]
+      properties:
+        application_id:
+          type: string
+        status:
+          type: string
+          enum: [created]
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - E_RESUME_PARSE_FAILED
+            - E_JD_PARSE_FAILED
+            - E_CONTENT_TOO_SHORT
+            - E_LANG_DETECT_FAILED
+            - E_EXPORT_FAILED
+            - E_BAD_REQUEST
+            - E_NOT_FOUND
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
