@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDefaultUserContext } from "@/lib/default-user";
+import { createApplicationRecord } from "@/lib/services/applications/application-record-service";
 import { readSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
 import { renderResumeDocumentHtml } from "@/lib/services/export/preview-renderer";
 import { renderPdfFromHtml } from "@/lib/services/export/pdf-export-service";
@@ -28,7 +29,16 @@ export async function POST(
       html
     });
 
-    return NextResponse.json(result);
+    const record = await createApplicationRecord({
+      draftId,
+      exportStoragePath: result.storagePath
+    });
+
+    return NextResponse.json({
+      ...result,
+      recordId: record.id,
+      recordPath: `/applications/${draftId}/record`
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown PDF export error." },
