@@ -37,7 +37,7 @@ export default async function ApplicationWorkspacePage({ params }: ApplicationWo
 
         <section className="grid gap-6 xl:grid-cols-[1.05fr_1.4fr_1fr]">
           <AnalysisSummaryPanel summary={workspace.summary} />
-          <SuggestionList suggestions={workspace.suggestions} />
+          <SuggestionList draftId={draftId} suggestions={workspace.suggestions} />
           <SnapshotOutlinePanel snapshot={workspace.snapshot} />
         </section>
       </section>
