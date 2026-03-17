@@ -1,11 +1,20 @@
-import React from "react";
+"use client";
+
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import { RevisionFeedbackDialog } from "@/components/applications/revision-feedback-dialog";
+import { SuggestionActionBar } from "@/components/applications/suggestion-action-bar";
 import type { WorkspaceSuggestion } from "@/lib/services/analysis/workspace-data";
 
 type SuggestionListProps = {
+  draftId: string;
   suggestions: WorkspaceSuggestion[];
 };
 
-export function SuggestionList({ suggestions }: SuggestionListProps) {
+export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
+  const router = useRouter();
+  const [openRevisionId, setOpenRevisionId] = useState<string | null>(null);
+
   return (
     <section className="rounded-[1.75rem] border border-line bg-white/85 p-6 shadow-card">
       <div className="flex items-end justify-between gap-4">
@@ -39,15 +48,19 @@ export function SuggestionList({ suggestions }: SuggestionListProps) {
               <p className="mt-2 text-sm leading-6 text-slate-700">{suggestion.reasonText}</p>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white">Accept</button>
-              <button className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-                Revise
-              </button>
-              <button className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-                Reject
-              </button>
-            </div>
+            <SuggestionActionBar
+              draftId={draftId}
+              onActionComplete={async () => router.refresh()}
+              onRevise={() => setOpenRevisionId(suggestion.id)}
+              suggestionId={suggestion.id}
+            />
+            <RevisionFeedbackDialog
+              draftId={draftId}
+              onActionComplete={async () => router.refresh()}
+              onClose={() => setOpenRevisionId(null)}
+              open={openRevisionId === suggestion.id}
+              suggestionId={suggestion.id}
+            />
           </article>
         ))}
       </div>

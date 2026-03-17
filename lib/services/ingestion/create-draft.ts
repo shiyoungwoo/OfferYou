@@ -82,7 +82,8 @@ export async function createDraft(input: CreateDraftInput): Promise<DraftRecord>
       gaps: analysis.gaps,
       riskNotes: analysis.riskNotes
     },
-    suggestions: analysis.suggestions
+    suggestions: analysis.suggestions,
+    factSubmissions: []
   };
 
   await saveWorkspaceDraft(draft);

@@ -15,6 +15,10 @@ export type WorkspaceSuggestion = {
   afterText: string;
   reasonText: string;
   status: "pending" | "accepted" | "rejected";
+  revisionRound?: number;
+  parentSuggestionId?: string;
+  userFeedbackType?: string;
+  userFeedbackText?: string;
 };
 
 export type WorkspaceSnapshotOutline = {
@@ -33,6 +37,7 @@ export type WorkspaceData = {
   summary: WorkspaceSummary;
   suggestions: WorkspaceSuggestion[];
   snapshot: WorkspaceSnapshotOutline;
+  factSubmissionCount?: number;
 };
 
 export async function getAnalysisWorkspaceData(draftId: string): Promise<WorkspaceData> {
@@ -45,6 +50,7 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
       stage: persisted.stage,
       summary: persisted.analysis,
       suggestions: persisted.suggestions,
+      factSubmissionCount: persisted.factSubmissions.length,
       snapshot: {
         pageEstimate: 2,
         sections: [
@@ -96,7 +102,8 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
         afterText:
           "Independently designed OfferYou, an AI-assisted resume tailoring workflow with deconstruct, mentor, and snapshot stages, translating a job-seeking pain point into a full MVP protocol and execution model.",
         reasonText: "This frames the work as product system design rather than a loose side project note.",
-        status: "pending"
+        status: "pending",
+        revisionRound: 0
       },
       {
         id: `${draftId}-s2`,
@@ -106,9 +113,11 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
         afterText:
           "Packaged multi-step AI publishing workflows across Xiaohongshu, WeChat, and Weibo, turning repeated cross-platform operations into reusable release systems.",
         reasonText: "This sharpens system-building evidence and keeps the claim tied to reusable workflow outcomes.",
-        status: "pending"
+        status: "pending",
+        revisionRound: 0
       }
     ],
+    factSubmissionCount: 0,
     snapshot: {
       pageEstimate: 2,
       sections: [

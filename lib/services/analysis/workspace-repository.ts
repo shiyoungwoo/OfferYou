@@ -31,6 +31,20 @@ export type PersistedWorkspaceDraft = {
     afterText: string;
     reasonText: string;
     status: "pending" | "accepted" | "rejected";
+    parentSuggestionId?: string;
+    revisionRound: number;
+    userFeedbackType?: string;
+    userFeedbackText?: string;
+  }>;
+  factSubmissions: Array<{
+    id: string;
+    relatedSuggestionId?: string;
+    submissionText: string;
+    factType?: string;
+    sourceType: "user_feedback";
+    truthConfirmed: false;
+    reusableForMaster: false;
+    status: "pending_confirmation";
   }>;
 };
 

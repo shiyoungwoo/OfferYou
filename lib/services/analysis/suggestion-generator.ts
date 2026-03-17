@@ -15,6 +15,7 @@ export type SuggestionSeed = {
   afterText: string;
   reasonText: string;
   status: "pending";
+  revisionRound: number;
 };
 
 export function generateSeedSuggestions(input: SuggestionSeedInput): SuggestionSeed[] {
@@ -25,7 +26,8 @@ export function generateSeedSuggestions(input: SuggestionSeedInput): SuggestionS
     beforeText: fact.text,
     afterText: rewriteFactForJd(fact.text, input.jdText),
     reasonText: "This version brings the block closer to the JD emphasis without inventing new facts.",
-    status: "pending"
+    status: "pending",
+    revisionRound: 0
   }));
 }
 
