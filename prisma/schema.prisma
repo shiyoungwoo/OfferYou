@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ResumeAsset {
+  id               String   @id @default(cuid())
+  userId           String
+  assetType        String
+  storagePath      String
+  mimeType         String
+  originalFilename String?
+  extractedText    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model MasterResume {
+  id                         String        @id @default(cuid())
+  userId                     String
+  title                      String
+  integrityNoticeConfirmedAt DateTime?
+  createdAt                  DateTime      @default(now())
+  updatedAt                  DateTime      @updatedAt
+  resumeBlocks               ResumeBlock[]
+  insights                   MasterInsight[]
+  applicationDrafts          JobApplicationDraft[]
+}
+
+model ResumeBlock {
+  id              String       @id @default(cuid())
+  masterResumeId  String
+  blockType       String
+  rawText         String
+  normalizedText  String?
+  structuredJson  Json?
+  evidenceAssetId String?
+  status          String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  masterResume    MasterResume @relation(fields: [masterResumeId], references: [id], onDelete: Cascade)
+}
+
+model MasterInsight {
+  id               String       @id @default(cuid())
+  masterResumeId   String
+  title            String
+  insightText      String
+  evidenceBlockIds Json?
+  origin           String
+  status           String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  masterResume     MasterResume @relation(fields: [masterResumeId], references: [id], onDelete: Cascade)
+}
+
+model JobApplicationDraft {
+  id              String              @id @default(cuid())
+  userId          String
+  masterResumeId  String
+  jdAssetId       String?
+  company         String
+  jobTitle        String
+  language        String
+  status          String
+  stage           String
+  fitScore        Int?
+  analysisJson    Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  masterResume    MasterResume        @relation(fields: [masterResumeId], references: [id], onDelete: Restrict)
+  suggestions     RewriteSuggestion[]
+  factSubmissions CandidateFactSubmission[]
+  snapshots       ResumeSnapshot[]
+  records         ApplicationRecord[]
+}
+
+model RewriteSuggestion {
+  id                String   @id @default(cuid())
+  applicationDraftId String
+  targetBlockId     String?
+  parentSuggestionId String?
+  revisionRound     Int      @default(0)
+  beforeText        String
+  afterText         String
+  reasonText        String
+  evidenceRefsJson  Json?
+  status            String
+  userFeedbackType  String?
+  userFeedbackText  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  applicationDraft  JobApplicationDraft @relation(fields: [applicationDraftId], references: [id], onDelete: Cascade)
+}
+
+model CandidateFactSubmission {
+  id                  String   @id @default(cuid())
+  applicationDraftId  String
+  relatedSuggestionId String?
+  submissionText      String
+  factType            String?
+  sourceType          String?
+  truthConfirmed      Boolean  @default(false)
+  reusableForMaster   Boolean  @default(false)
+  status              String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  applicationDraft    JobApplicationDraft @relation(fields: [applicationDraftId], references: [id], onDelete: Cascade)
+}
+
+model ResumeSnapshot {
+  id                String   @id @default(cuid())
+  applicationDraftId String
+  templateKey       String
+  documentJson      Json
+  pageEstimate      Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  applicationDraft  JobApplicationDraft @relation(fields: [applicationDraftId], references: [id], onDelete: Cascade)
+}
+
+model ApplicationRecord {
+  id               String   @id @default(cuid())
+  applicationDraftId String
+  snapshotId       String
+  exportAssetId    String?
+  company          String
+  jobTitle         String
+  appliedAt        DateTime
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  applicationDraft JobApplicationDraft @relation(fields: [applicationDraftId], references: [id], onDelete: Cascade)
+}
