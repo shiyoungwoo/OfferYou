@@ -1,5 +1,8 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { analyzeDraft } from "@/lib/services/analysis/gap-analysis-service";
+import { saveWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
+import type { PersistedWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import { getDefaultUserContext } from "@/lib/default-user";
 import { extractTextFromResumeSource } from "@/lib/services/ingestion/extract-text";
 import { LocalStorageAdapter } from "@/lib/storage/local-storage-adapter";
@@ -33,16 +36,36 @@ export async function createDraft(input: CreateDraftInput): Promise<DraftRecord>
     rawReference: input.resumeAssetRef
   });
 
+  const draftId = randomUUID();
+
   const jdAsset = await storageAdapter.put({
     userId,
     kind: "jd_source",
-    filename: `${input.company}-${input.jobTitle}.txt`,
+    filename: `${input.company}-${input.jobTitle}-${draftId}.txt`,
     buffer: Buffer.from(input.jdContent),
     mimeType: "text/plain"
   });
 
-  return {
-    id: randomUUID(),
+  const factSeeds = [
+    {
+      title: "Resume baseline",
+      section: "summary",
+      text: resumeExtractedText || "Resume content pending richer extraction."
+    },
+    {
+      title: "Target role fit",
+      section: "project",
+      text: `Applying for ${input.jobTitle} at ${input.company} with an emphasis on workflow design and AI product execution.`
+    }
+  ];
+
+  const analysis = await analyzeDraft({
+    jdText: input.jdContent,
+    facts: factSeeds
+  });
+
+  const draft: PersistedWorkspaceDraft = {
+    id: draftId,
     userId,
     company: input.company,
     jobTitle: input.jobTitle,
@@ -52,6 +75,17 @@ export async function createDraft(input: CreateDraftInput): Promise<DraftRecord>
     jdPreview: input.jdContent.slice(0, 140),
     jdAsset,
     resumeSourceRef: input.resumeAssetRef,
-    resumeExtractedText
+    resumeExtractedText,
+    analysis: {
+      fitScore: analysis.fitScore,
+      strengths: analysis.strengths,
+      gaps: analysis.gaps,
+      riskNotes: analysis.riskNotes
+    },
+    suggestions: analysis.suggestions
   };
+
+  await saveWorkspaceDraft(draft);
+
+  return draft;
 }
