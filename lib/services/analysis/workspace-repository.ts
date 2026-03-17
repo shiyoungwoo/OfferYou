@@ -44,7 +44,7 @@ export type PersistedWorkspaceDraft = {
     sourceType: "user_feedback";
     truthConfirmed: false;
     reusableForMaster: false;
-    status: "pending_confirmation";
+    status: "pending_confirmation" | "confirmed" | "rejected";
   }>;
 };
 
