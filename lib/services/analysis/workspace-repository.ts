@@ -1,5 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { executeSql, querySql, sqlString } from "@/lib/db";
 
 export type PersistedWorkspaceDraft = {
   id: string;
@@ -48,21 +47,40 @@ export type PersistedWorkspaceDraft = {
   }>;
 };
 
-function getDraftPath(draftId: string) {
-  return path.join(process.cwd(), "storage", "drafts", `${draftId}.json`);
-}
-
 export async function saveWorkspaceDraft(draft: PersistedWorkspaceDraft) {
-  const draftPath = getDraftPath(draft.id);
-  await mkdir(path.dirname(draftPath), { recursive: true });
-  await writeFile(draftPath, JSON.stringify(draft, null, 2), "utf8");
+  const payload = sqlString(JSON.stringify(draft));
+  const company = sqlString(draft.company);
+  const jobTitle = sqlString(draft.jobTitle);
+  const userId = sqlString(draft.userId);
+
+  await executeSql(`
+    INSERT INTO workspace_drafts (id, user_id, company, job_title, payload_json, created_at, updated_at)
+    VALUES (${sqlString(draft.id)}, ${userId}, ${company}, ${jobTitle}, ${payload}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ON CONFLICT(id) DO UPDATE SET
+      user_id = excluded.user_id,
+      company = excluded.company,
+      job_title = excluded.job_title,
+      payload_json = excluded.payload_json,
+      updated_at = CURRENT_TIMESTAMP;
+  `);
 }
 
 export async function readWorkspaceDraft(draftId: string): Promise<PersistedWorkspaceDraft | null> {
-  try {
-    const contents = await readFile(getDraftPath(draftId), "utf8");
-    return JSON.parse(contents) as PersistedWorkspaceDraft;
-  } catch {
+  const rows = await querySql<{ payload_json: string }>(
+    `SELECT payload_json FROM workspace_drafts WHERE id = ${sqlString(draftId)} LIMIT 1;`
+  );
+
+  if (rows.length === 0) {
     return null;
   }
+
+  return JSON.parse(rows[0].payload_json) as PersistedWorkspaceDraft;
+}
+
+export async function listWorkspaceDrafts(): Promise<PersistedWorkspaceDraft[]> {
+  const rows = await querySql<{ payload_json: string }>(
+    "SELECT payload_json FROM workspace_drafts ORDER BY updated_at DESC;"
+  );
+
+  return rows.map((row) => JSON.parse(row.payload_json) as PersistedWorkspaceDraft);
 }

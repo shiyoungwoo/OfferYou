@@ -1,12 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { executeSql, querySql, sqlString } from "@/lib/db";
 import { composeSnapshotDocument } from "@/lib/services/snapshot/snapshot-composer";
 import { readWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import type { ResumeDocument } from "@/lib/document/resume-document";
-
-function getSnapshotPath(draftId: string) {
-  return path.join(process.cwd(), "storage", "snapshots", `${draftId}.json`);
-}
 
 export async function generateSnapshotForDraft(draftId: string) {
   const draft = await readWorkspaceDraft(draftId);
@@ -16,25 +11,38 @@ export async function generateSnapshotForDraft(draftId: string) {
   }
 
   const document = composeSnapshotDocument(draft);
-  const snapshotPath = getSnapshotPath(draftId);
-
-  await mkdir(path.dirname(snapshotPath), { recursive: true });
-  await writeFile(snapshotPath, JSON.stringify(document, null, 2), "utf8");
+  await executeSql(`
+    INSERT INTO snapshots (draft_id, template_key, payload_json, created_at, updated_at)
+    VALUES (
+      ${sqlString(draftId)},
+      ${sqlString(document.templateKey)},
+      ${sqlString(JSON.stringify(document))},
+      CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP
+    )
+    ON CONFLICT(draft_id) DO UPDATE SET
+      template_key = excluded.template_key,
+      payload_json = excluded.payload_json,
+      updated_at = CURRENT_TIMESTAMP;
+  `);
 
   return {
     draftId,
     templateKey: document.templateKey,
-    snapshotPath,
+    snapshotPath: `sqlite://snapshots/${draftId}`,
     pageEstimate: Math.max(1, Math.ceil(document.sections.reduce((sum, section) => sum + section.items.length, 0) / 6)),
     document
   };
 }
 
 export async function readSnapshotForDraft(draftId: string): Promise<ResumeDocument | null> {
-  try {
-    const contents = await readFile(getSnapshotPath(draftId), "utf8");
-    return JSON.parse(contents) as ResumeDocument;
-  } catch {
+  const rows = await querySql<{ payload_json: string }>(
+    `SELECT payload_json FROM snapshots WHERE draft_id = ${sqlString(draftId)} LIMIT 1;`
+  );
+
+  if (rows.length === 0) {
     return null;
   }
+
+  return JSON.parse(rows[0].payload_json) as ResumeDocument;
 }

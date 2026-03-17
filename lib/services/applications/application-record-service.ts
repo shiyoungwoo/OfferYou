@@ -1,6 +1,5 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { executeSql, querySql, sqlString } from "@/lib/db";
 import { readWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import { readSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
 
@@ -14,14 +13,6 @@ export type ApplicationRecord = {
   appliedAt: string;
   acceptedSuggestionCount: number;
 };
-
-function getRecordsDir() {
-  return path.join(process.cwd(), "storage", "application-records");
-}
-
-function getRecordPath(recordId: string) {
-  return path.join(getRecordsDir(), `${recordId}.json`);
-}
 
 export async function createApplicationRecord(input: {
   draftId: string;
@@ -45,33 +36,38 @@ export async function createApplicationRecord(input: {
     acceptedSuggestionCount: draft.suggestions.filter((item) => item.status === "accepted").length
   };
 
-  await mkdir(getRecordsDir(), { recursive: true });
-  await writeFile(getRecordPath(record.id), JSON.stringify(record, null, 2), "utf8");
+  await executeSql(`
+    INSERT INTO application_records (id, draft_id, company, job_title, payload_json, applied_at, created_at)
+    VALUES (
+      ${sqlString(record.id)},
+      ${sqlString(record.draftId)},
+      ${sqlString(record.company)},
+      ${sqlString(record.jobTitle)},
+      ${sqlString(JSON.stringify(record))},
+      ${sqlString(record.appliedAt)},
+      CURRENT_TIMESTAMP
+    );
+  `);
 
   return record;
 }
 
 export async function readApplicationRecord(recordId: string): Promise<ApplicationRecord | null> {
-  try {
-    const contents = await readFile(getRecordPath(recordId), "utf8");
-    return JSON.parse(contents) as ApplicationRecord;
-  } catch {
+  const rows = await querySql<{ payload_json: string }>(
+    `SELECT payload_json FROM application_records WHERE id = ${sqlString(recordId)} LIMIT 1;`
+  );
+
+  if (rows.length === 0) {
     return null;
   }
+
+  return JSON.parse(rows[0].payload_json) as ApplicationRecord;
 }
 
 export async function listApplicationRecords(): Promise<ApplicationRecord[]> {
-  try {
-    const files = await readdir(getRecordsDir());
-    const records = await Promise.all(
-      files.map(async (file) => {
-        const contents = await readFile(path.join(getRecordsDir(), file), "utf8");
-        return JSON.parse(contents) as ApplicationRecord;
-      })
-    );
+  const rows = await querySql<{ payload_json: string }>(
+    "SELECT payload_json FROM application_records ORDER BY applied_at DESC;"
+  );
 
-    return records.sort((a, b) => b.appliedAt.localeCompare(a.appliedAt));
-  } catch {
-    return [];
-  }
+  return rows.map((row) => JSON.parse(row.payload_json) as ApplicationRecord);
 }

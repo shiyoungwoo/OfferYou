@@ -5,73 +5,143 @@
 
 ---
 
-OfferYou is an AI-powered resume optimization assistant that goes beyond keyword matching. Through structured dialogue, it **uncovers your deep, latent talents** — the things you're naturally great at but may have never thought to highlight — then uses that insight to create sharper, more authentic CVs.
+OfferYou is now a runnable Web MVP for AI-assisted resume tailoring. It combines a fact-safe Master workspace, mentor-mode rewrite review, snapshot generation, A4 preview, and PDF export in one product flow.
 
-## 🧬 What Makes OfferYou Different?
+## What This Repo Contains
 
-### 🔮 Talent Radar (v0.1 — Available Now)
-Before touching your resume, OfferYou asks you **3 precise questions** to build a Talent Profile Card. This card changes how your resume is analyzed: instead of just matching keywords, it evaluates whether a role fits your **natural energy pattern**.
+This repository now includes both:
 
-### 🔬 Deep Talent Excavation (v0.2 Preview — Included)
-A 30-60 minute Socratic dialogue (up to 10 questions) that produces a comprehensive **Talent Manual** — combining Gallup StrengthsFinder theory, Flow theory, and Jungian shadow work to map your foundational talents to concrete career directions.
+- the original prompt/template assets for talent discovery and JD alignment
+- a runnable Next.js product MVP under the same repo
 
-### 🛡️ Absolute Distortion Prevention
-Your resume is yours. OfferYou never fabricates achievements. Every optimization is traceable to your original data, presented side-by-side for your approval.
+The current MVP supports:
 
-### 📸 Snapshot Derivation
-Each tailored CV is an independent branch from your "Master Repository." Your core facts stay clean; job-specific versions are disposable snapshots.
+- creating a job application draft from JD + resume source
+- deterministic gap analysis and seed suggestions
+- accept / reject / revise suggestion actions
+- pending fact submission review in Master
+- snapshot generation without polluting the Master
+- A4-style preview rendering
+- PDF export
+- application record creation
 
-## 👀 See It in Action
+## Current Product Flow
 
-Check out the **[Career Switch Demo](examples/demo_career_switch.md)** — a sanitized real case where a banking professional transitions to an AI Product Manager role using the full OfferYou pipeline.
+1. Open `/applications/new`
+2. Create a draft with company, role, JD, and resume source
+3. Review the analysis workspace at `/applications/[draftId]`
+4. Accept, reject, or revise suggestions
+5. Generate a snapshot
+6. Open `/applications/[draftId]/preview`
+7. Export PDF
+8. Review the resulting record at `/applications/[draftId]/record`
 
-## 📦 Repository Structure
+## Core Product Principles
+
+### Absolute Distortion Prevention
+OfferYou does not silently invent facts. Suggestions are reviewed explicitly before they affect a snapshot.
+
+### Snapshot Derivation
+Each tailored resume is produced as an independent snapshot. The source Master stays clean.
+
+### Fact Layer vs Insight Layer
+The product distinguishes between:
+
+- first-hand facts
+- AI-surfaced but user-confirmed insights
+- job-specific expression changes
+
+### Fact Review Queue
+If the user adds new raw source material during suggestion revision, it enters a pending fact review queue instead of going straight into the Master.
+
+## Local Development
+
+Requirements:
+
+- Node 22+
+- pnpm
+- sqlite3 CLI available on the machine
+- Playwright browsers installed locally for PDF export verification
+
+Install:
+
+```bash
+pnpm install
+```
+
+Run:
+
+```bash
+pnpm dev
+```
+
+Build:
+
+```bash
+pnpm build
+```
+
+Test:
+
+```bash
+pnpm test
+```
+
+## Data Storage
+
+The MVP currently uses a local SQLite file at `storage/offeryou.sqlite` for core product entities:
+
+- workspace drafts
+- snapshots
+- application records
+
+Uploaded/exported assets still live under the local `storage/` directory.
+
+`prisma/schema.prisma` remains in the repo as the target long-term schema, but runtime persistence is currently stabilized with a direct SQLite adapter because Prisma engine generation is environment-sensitive in this workspace.
+
+## Repository Structure
 
 ```
 OfferYou/
-├── README.md
-├── SKILL.md                              # Agent execution contract
-├── prompts/
-│   ├── talent_radar.md                   # ⭐ 3-question talent profiling
-│   ├── talent_excavation.md              # 🔬 Deep discovery (≤10 questions)
-│   ├── gap_analysis.md                   # Recruiter-persona JD analysis
-│   └── rewrite_expert.md                 # STAR-method optimization
-├── templates/
-│   ├── Talent_Profile_Card.md            # Structured talent output
-│   ├── Master_Resume_Template.md         # Your "ground truth" fact library
-│   └── CV_Snapshot_Template.md           # Per-job tailored output
-├── examples/
-│   └── demo_career_switch.md             # 📖 Real-world Before/After case
-└── design/                               # Architecture preview (for devs)
-    ├── api/openapi.yaml
-    └── docs/MVP_Protocol.md
+├── app/                                  # Next.js App Router pages and API routes
+├── components/                           # Product UI
+├── lib/                                  # Services, storage, export, document model
+├── prisma/                               # Target schema for future Prisma adoption
+├── prompts/                              # Original prompt assets
+├── templates/                            # Original resume/talent templates
+├── design/                               # Earlier protocol and API design docs
+├── docs/plans/                           # V2 design and implementation plans
+└── tests/                                # Unit and integration coverage
 ```
 
-## 🚀 Quick Start
+## Verification Status
 
-1. **Discover your talents**: Run `prompts/talent_radar.md` → get your Talent Profile Card.
-2. **Build your fact library**: Fill in `templates/Master_Resume_Template.md`.
-3. **Analyze a job**: Feed your master + JD + talent card into `prompts/gap_analysis.md`.
-4. **Refine**: Use `prompts/rewrite_expert.md` for mentor-mode suggestions.
-5. **Go deeper** (optional): Run `prompts/talent_excavation.md` for a full Talent Manual.
+At the time of the latest MVP update:
 
-## 🗺️ Roadmap
+- `pnpm build` passes
+- unit/integration test suite passes
+- PDF export has been verified in this environment with elevated browser permission
 
-| Phase | Feature | Status |
-|-------|---------|--------|
-| v0.1 | Job Apply Skill + **Talent Radar** (3-question profiling) | ✅ Released |
-| v0.2 | Deep Talent Excavation (≤10 questions, 天赋说明书) | 🧪 Preview Included |
-| v0.3 | Career Direction Recommendations based on Talent × Market | 📋 Planned |
-| v1.0 | Full Platform with Talent × Role Matching Engine | 🌟 Vision |
+## Roadmap
 
-## 🤝 Contributing
-PRs welcome! Especially interested in:
-- Additional talent assessment frameworks
-- Localized prompt variants (languages, cultural context)
-- Integration with ATS platforms
+Near-term follow-up work:
 
-## 📜 License
+- replace the temporary deterministic analysis layer with model-backed analysis
+- move remaining Master entities fully into SQLite-backed persistence
+- add richer pagination and template B
+- add dashboard-level application record history
+
+## Legacy Assets
+
+The original prompt-driven OfferYou assets are still present and still useful:
+
+- `prompts/talent_radar.md`
+- `prompts/talent_excavation.md`
+- `prompts/gap_analysis.md`
+- `prompts/rewrite_expert.md`
+- `templates/*`
+- `examples/demo_career_switch.md`
+
+## License
+
 MIT
-
----
-*Part of the [OrbitOS](https://github.com/nicekid1/OrbitOS) Ecosystem. Built for Agentic Workflows.*
