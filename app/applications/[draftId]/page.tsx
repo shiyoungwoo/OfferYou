@@ -1,5 +1,6 @@
 import { AnalysisSummaryPanel } from "@/components/applications/analysis-summary-panel";
 import { ProgressStageBar } from "@/components/applications/progress-stage-bar";
+import { SnapshotGenerateButton } from "@/components/applications/snapshot-generate-button";
 import { SnapshotOutlinePanel } from "@/components/applications/snapshot-outline-panel";
 import { SuggestionList } from "@/components/applications/suggestion-list";
 import { getAnalysisWorkspaceData } from "@/lib/services/analysis/workspace-data";
@@ -30,6 +31,9 @@ export default async function ApplicationWorkspacePage({ params }: ApplicationWo
               JD flow focus: keep the user in control, isolate accepted changes, and prepare a clean snapshot for
               preview.
             </div>
+          </div>
+          <div className="mt-6">
+            <SnapshotGenerateButton draftId={draftId} />
           </div>
         </header>
 
