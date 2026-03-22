@@ -5,31 +5,28 @@ import { saveWorkspaceDraft } from "@/lib/services/analysis/workspace-repository
 import type { PersistedWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import { getDefaultUserContext } from "@/lib/default-user";
 import { extractTextFromResumeSource } from "@/lib/services/ingestion/extract-text";
+import { listMasterFacts } from "@/lib/services/master/master-service";
+import {
+  findCareerDirectionBySlug,
+  getLatestConfirmedCareerNavigationForTalentProfile,
+  getLatestConfirmedTalentProfile
+} from "@/lib/services/talent/talent-profile-service";
 import { LocalStorageAdapter } from "@/lib/storage/local-storage-adapter";
 import type { CreateDraftInput } from "@/lib/validation/drafts";
 
-type DraftRecord = {
-  id: string;
-  userId: string;
-  company: string;
-  jobTitle: string;
-  language: string;
-  stage: "analysis_ready";
-  status: "created";
-  jdPreview: string;
-  jdAsset: {
-    storagePath: string;
-    mimeType: string;
-    originalFilename: string;
-  };
-  resumeSourceRef?: string;
-  resumeExtractedText: string;
-};
-
 const storageAdapter = new LocalStorageAdapter(path.join(process.cwd(), "storage"));
 
-export async function createDraft(input: CreateDraftInput): Promise<DraftRecord> {
+export async function createDraft(input: CreateDraftInput): Promise<PersistedWorkspaceDraft> {
   const { userId } = getDefaultUserContext();
+  const masterFacts = await listMasterFacts(userId);
+  const talentProfile = await getLatestConfirmedTalentProfile(userId);
+  const careerNavigation = talentProfile
+    ? await getLatestConfirmedCareerNavigationForTalentProfile(userId, talentProfile.id)
+    : null;
+  const selectedCareerDirection =
+    careerNavigation && input.careerDirectionSlug
+      ? findCareerDirectionBySlug(careerNavigation, input.careerDirectionSlug)
+      : null;
 
   const resumeExtractedText = await extractTextFromResumeSource({
     content: input.resumeContent,
@@ -50,17 +47,62 @@ export async function createDraft(input: CreateDraftInput): Promise<DraftRecord>
     {
       title: "Resume baseline",
       section: "summary",
-      text: resumeExtractedText || "Resume content pending richer extraction."
+      text: resumeExtractedText || "Resume content pending richer extraction.",
+      sourceKind: "resume_baseline" as const,
+      sourceLabel: "Resume baseline"
     },
+    ...masterFacts.map((fact) => ({
+      title: fact.title,
+      section: fact.blockType,
+      text: fact.summary,
+      sourceKind: "master_fact" as const,
+      sourceLabel: `Master fact: ${fact.title}`
+    })),
+    ...(talentProfile
+      ? [
+          {
+            title: "Confirmed strengths profile",
+            section: "summary",
+            text: `${talentProfile.profile.headline} ${talentProfile.profile.confidenceNote}`,
+            sourceKind: "target_role_fit" as const,
+            sourceLabel: "Talent lens"
+          }
+        ]
+      : []),
+    ...(selectedCareerDirection
+      ? [
+          {
+            title: `Career direction: ${selectedCareerDirection.label}`,
+            section: "summary",
+            text: `${selectedCareerDirection.rationale} Watch-out: ${selectedCareerDirection.watchOut}`,
+            sourceKind: "target_role_fit" as const,
+            sourceLabel: "Career direction lens"
+          }
+        ]
+      : []),
     {
       title: "Target role fit",
       section: "project",
-      text: `Applying for ${input.jobTitle} at ${input.company} with an emphasis on workflow design and AI product execution.`
+      text: `Applying for ${input.jobTitle} at ${input.company} with an emphasis on truthful role alignment, transferable strengths, and evidence-backed readiness.`,
+      sourceKind: "target_role_fit" as const,
+      sourceLabel: "Role-fit framing"
     }
   ];
 
   const analysis = await analyzeDraft({
     jdText: input.jdContent,
+    talentProfile: talentProfile
+      ? {
+          headline: talentProfile.profile.headline,
+          confidenceNote: talentProfile.profile.confidenceNote
+        }
+      : undefined,
+    careerDirection: selectedCareerDirection
+      ? {
+          label: selectedCareerDirection.label,
+          rationale: selectedCareerDirection.rationale
+        }
+      : undefined,
     facts: factSeeds
   });
 
@@ -75,13 +117,33 @@ export async function createDraft(input: CreateDraftInput): Promise<DraftRecord>
     jdPreview: input.jdContent.slice(0, 140),
     jdAsset,
     resumeSourceRef: input.resumeAssetRef,
+    profilePhotoAssetRef: input.profilePhotoAssetRef,
     resumeExtractedText,
     analysis: {
       fitScore: analysis.fitScore,
+      optimizationMode: analysis.optimizationMode,
       strengths: analysis.strengths,
       gaps: analysis.gaps,
       riskNotes: analysis.riskNotes
     },
+    talentProfileUsed: talentProfile
+      ? {
+          id: talentProfile.id,
+          headline: talentProfile.profile.headline,
+          confidenceNote: talentProfile.profile.confidenceNote
+        }
+      : undefined,
+    careerDirectionUsed:
+      careerNavigation && selectedCareerDirection
+        ? {
+            id: careerNavigation.id,
+            slug: selectedCareerDirection.slug,
+            label: selectedCareerDirection.label,
+            rationale: selectedCareerDirection.rationale,
+            watchOut: selectedCareerDirection.watchOut
+          }
+        : undefined,
+    masterFactsUsed: masterFacts,
     suggestions: analysis.suggestions,
     factSubmissions: []
   };

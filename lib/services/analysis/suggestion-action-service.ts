@@ -45,6 +45,8 @@ export async function applySuggestionAction(input: SuggestionActionInput) {
     afterText: reviseAfterText(suggestion.afterText, input.feedbackType, input.feedbackText),
     reasonText: buildRevisionReason(input.feedbackType, input.feedbackText),
     status: "pending" as const,
+    sourceKind: "revision" as const,
+    sourceLabel: `Revision of ${suggestion.sourceLabel}`,
     parentSuggestionId: suggestion.id,
     revisionRound: suggestion.revisionRound + 1,
     userFeedbackType: input.feedbackType,

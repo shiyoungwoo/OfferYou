@@ -6,18 +6,27 @@ type TemplateSwitcherProps = {
   currentTemplate: string;
 };
 
+const templates = [
+  { key: "template_a", label: "经典" },
+  { key: "template_b", label: "简约" }
+];
+
 export function TemplateSwitcher({ currentTemplate }: TemplateSwitcherProps) {
   return (
-    <div className="rounded-[1.4rem] border border-line bg-white/85 p-4 shadow-card">
-      <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Template</p>
-      <div className="mt-3 flex flex-wrap gap-3">
-        <button className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white" type="button">
-          {currentTemplate}
+    <div className="flex gap-1">
+      {templates.map((t) => (
+        <button
+          key={t.key}
+          className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+            currentTemplate === t.key
+              ? "bg-accent text-white"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+          type="button"
+        >
+          {t.label}
         </button>
-        <button className="rounded-full border border-line bg-paper px-4 py-2 text-sm font-semibold text-slate-600" type="button">
-          template_b
-        </button>
-      </div>
+      ))}
     </div>
   );
 }

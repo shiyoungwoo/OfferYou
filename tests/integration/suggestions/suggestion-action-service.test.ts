@@ -32,6 +32,7 @@ describe("applySuggestionAction", () => {
       resumeExtractedText: "Designed workflow systems.",
       analysis: {
         fitScore: 70,
+        optimizationMode: "baseline_jd_match",
         strengths: ["workflow fit"],
         gaps: ["metrics"],
         riskNotes: ["stay factual"]
@@ -45,6 +46,8 @@ describe("applySuggestionAction", () => {
           afterText: "Designed AI workflow systems.",
           reasonText: "Tie to the JD.",
           status: "pending",
+          sourceKind: "master_fact",
+          sourceLabel: "Master fact: OfferYou founder block",
           revisionRound: 0
         }
       ],
@@ -69,6 +72,8 @@ describe("applySuggestionAction", () => {
     expect(result.status).toBe("needs_revision");
     expect(result.childSuggestion.parentSuggestionId).toBe("s1");
     expect(result.childSuggestion.revisionRound).toBe(1);
+    expect(result.childSuggestion.sourceKind).toBe("revision");
+    expect(result.childSuggestion.sourceLabel).toContain("Master fact");
   });
 
   it("creates a pending fact submission when feedback adds new fact material", async () => {

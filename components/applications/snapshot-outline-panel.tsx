@@ -7,33 +7,29 @@ type SnapshotOutlinePanelProps = {
 
 export function SnapshotOutlinePanel({ snapshot }: SnapshotOutlinePanelProps) {
   return (
-    <section className="rounded-[1.75rem] border border-line bg-white/85 p-6 shadow-card">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Snapshot Outline</p>
-          <h2 className="mt-3 text-2xl font-semibold">Current derived structure</h2>
-        </div>
-        <div className="rounded-[1.2rem] border border-line bg-paper px-4 py-3 text-right">
-          <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Page Estimate</p>
-          <p className="mt-2 text-2xl font-semibold text-ink">{snapshot.pageEstimate}</p>
-        </div>
+    <section className="rounded-2xl border border-line bg-white/85 p-5 shadow-card">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">快照大纲</p>
+        <span className="rounded-full border border-line bg-paper px-3 py-1 text-xs text-slate-600">
+          预估 {snapshot.pageEstimate} 页
+        </span>
       </div>
 
-      <div className="mt-6 space-y-4">
+      <div className="mt-3 space-y-2">
         {snapshot.sections.map((section) => (
-          <article key={section.title} className="rounded-[1.35rem] border border-line bg-paper p-4">
-            <div className="flex items-center justify-between gap-4">
-              <h3 className="text-base font-semibold">{section.title}</h3>
-              <span className="text-xs uppercase tracking-[0.24em] text-slate-500">{section.itemCount} items</span>
+          <div key={section.title} className="rounded-xl bg-paper px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium text-slate-800">{section.title}</p>
+              <span className="text-xs text-slate-500">{section.itemCount} 项</span>
             </div>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
-              {section.items.map((item) => (
-                <li key={item} className="rounded-xl bg-white px-3 py-2">
-                  {item}
+            <ul className="mt-1 space-y-1">
+              {section.items.map((item, index) => (
+                <li key={`${section.title}-${index}-${item}`} className="text-xs leading-5 text-slate-600">
+                  · {item}
                 </li>
               ))}
             </ul>
-          </article>
+          </div>
         ))}
       </div>
     </section>

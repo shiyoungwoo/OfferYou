@@ -32,10 +32,19 @@ describe("createApplicationRecord", () => {
       resumeExtractedText: "baseline",
       analysis: {
         fitScore: 81,
+        optimizationMode: "baseline_jd_match",
         strengths: ["workflow fit"],
         gaps: ["metrics"],
         riskNotes: ["stay factual"]
       },
+      masterFactsUsed: [
+        {
+          id: "fact-1",
+          title: "Workflow instrumentation rollout",
+          summary: "Led the post-launch instrumentation rollout for workflow analytics.",
+          blockType: "project"
+        }
+      ],
       suggestions: [
         {
           id: "s1",
@@ -45,6 +54,8 @@ describe("createApplicationRecord", () => {
           afterText: "Built AI product workflow",
           reasonText: "Reason",
           status: "accepted",
+          sourceKind: "master_fact",
+          sourceLabel: "Master fact: Workflow instrumentation rollout",
           revisionRound: 0
         }
       ],
@@ -67,5 +78,7 @@ describe("createApplicationRecord", () => {
 
     expect(record.company).toBe("OfferYou");
     expect(record.snapshotId).toBe("draft-1-snapshot");
+    expect(record.reusedMasterFacts).toHaveLength(1);
+    expect(record.reusedMasterFacts[0]?.title).toBe("Workflow instrumentation rollout");
   });
 });

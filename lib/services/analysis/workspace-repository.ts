@@ -15,13 +15,33 @@ export type PersistedWorkspaceDraft = {
     originalFilename: string;
   };
   resumeSourceRef?: string;
+  profilePhotoAssetRef?: string;
   resumeExtractedText: string;
   analysis: {
     fitScore: number;
+    optimizationMode: "baseline_jd_match" | "talent_amplified";
     strengths: string[];
     gaps: string[];
     riskNotes: string[];
   };
+  talentProfileUsed?: {
+    id: string;
+    headline: string;
+    confidenceNote: string;
+  };
+  careerDirectionUsed?: {
+    id: string;
+    slug: string;
+    label: string;
+    rationale: string;
+    watchOut: string;
+  };
+  masterFactsUsed: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    blockType: "summary" | "experience" | "project" | "education" | "skill" | "certificate" | "other";
+  }>;
   suggestions: Array<{
     id: string;
     section: string;
@@ -30,6 +50,8 @@ export type PersistedWorkspaceDraft = {
     afterText: string;
     reasonText: string;
     status: "pending" | "accepted" | "rejected";
+    sourceKind: "resume_baseline" | "master_fact" | "target_role_fit" | "revision";
+    sourceLabel: string;
     parentSuggestionId?: string;
     revisionRound: number;
     userFeedbackType?: string;
@@ -41,8 +63,8 @@ export type PersistedWorkspaceDraft = {
     submissionText: string;
     factType?: string;
     sourceType: "user_feedback";
-    truthConfirmed: false;
-    reusableForMaster: false;
+    truthConfirmed: boolean;
+    reusableForMaster: boolean;
     status: "pending_confirmation" | "confirmed" | "rejected";
   }>;
 };

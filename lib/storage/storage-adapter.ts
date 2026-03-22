@@ -1,6 +1,7 @@
 export type StorageAssetKind =
   | "resume_source"
   | "jd_source"
+  | "profile_photo"
   | "export_pdf"
   | "export_docx"
   | "other";

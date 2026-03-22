@@ -12,6 +12,12 @@ export type ApplicationRecord = {
   exportStoragePath?: string;
   appliedAt: string;
   acceptedSuggestionCount: number;
+  reusedMasterFacts: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    blockType: "summary" | "experience" | "project" | "education" | "skill" | "certificate" | "other";
+  }>;
 };
 
 export async function createApplicationRecord(input: {
@@ -33,7 +39,8 @@ export async function createApplicationRecord(input: {
     jobTitle: draft.jobTitle,
     exportStoragePath: input.exportStoragePath,
     appliedAt: new Date().toISOString(),
-    acceptedSuggestionCount: draft.suggestions.filter((item) => item.status === "accepted").length
+    acceptedSuggestionCount: draft.suggestions.filter((item) => item.status === "accepted").length,
+    reusedMasterFacts: draft.masterFactsUsed ?? []
   };
 
   await executeSql(`
@@ -61,7 +68,7 @@ export async function readApplicationRecord(recordId: string): Promise<Applicati
     return null;
   }
 
-  return JSON.parse(rows[0].payload_json) as ApplicationRecord;
+  return normalizeApplicationRecord(JSON.parse(rows[0].payload_json) as Partial<ApplicationRecord>);
 }
 
 export async function listApplicationRecords(): Promise<ApplicationRecord[]> {
@@ -69,5 +76,19 @@ export async function listApplicationRecords(): Promise<ApplicationRecord[]> {
     "SELECT payload_json FROM application_records ORDER BY applied_at DESC;"
   );
 
-  return rows.map((row) => JSON.parse(row.payload_json) as ApplicationRecord);
+  return rows.map((row) => normalizeApplicationRecord(JSON.parse(row.payload_json) as Partial<ApplicationRecord>));
+}
+
+function normalizeApplicationRecord(record: Partial<ApplicationRecord>): ApplicationRecord {
+  return {
+    id: record.id ?? "",
+    draftId: record.draftId ?? "",
+    snapshotId: record.snapshotId ?? "",
+    company: record.company ?? "",
+    jobTitle: record.jobTitle ?? "",
+    exportStoragePath: record.exportStoragePath,
+    appliedAt: record.appliedAt ?? "",
+    acceptedSuggestionCount: record.acceptedSuggestionCount ?? 0,
+    reusedMasterFacts: record.reusedMasterFacts ?? []
+  };
 }

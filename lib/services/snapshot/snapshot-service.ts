@@ -10,21 +10,8 @@ export async function generateSnapshotForDraft(draftId: string) {
     throw new Error("Draft not found.");
   }
 
-  const document = composeSnapshotDocument(draft);
-  await executeSql(`
-    INSERT INTO snapshots (draft_id, template_key, payload_json, created_at, updated_at)
-    VALUES (
-      ${sqlString(draftId)},
-      ${sqlString(document.templateKey)},
-      ${sqlString(JSON.stringify(document))},
-      CURRENT_TIMESTAMP,
-      CURRENT_TIMESTAMP
-    )
-    ON CONFLICT(draft_id) DO UPDATE SET
-      template_key = excluded.template_key,
-      payload_json = excluded.payload_json,
-      updated_at = CURRENT_TIMESTAMP;
-  `);
+  const document = await composeSnapshotDocument(draft);
+  await saveSnapshotDocument(draftId, document);
 
   return {
     draftId,
@@ -45,4 +32,21 @@ export async function readSnapshotForDraft(draftId: string): Promise<ResumeDocum
   }
 
   return JSON.parse(rows[0].payload_json) as ResumeDocument;
+}
+
+export async function saveSnapshotDocument(draftId: string, document: ResumeDocument) {
+  await executeSql(`
+    INSERT INTO snapshots (draft_id, template_key, payload_json, created_at, updated_at)
+    VALUES (
+      ${sqlString(draftId)},
+      ${sqlString(document.templateKey)},
+      ${sqlString(JSON.stringify(document))},
+      CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP
+    )
+    ON CONFLICT(draft_id) DO UPDATE SET
+      template_key = excluded.template_key,
+      payload_json = excluded.payload_json,
+      updated_at = CURRENT_TIMESTAMP;
+  `);
 }

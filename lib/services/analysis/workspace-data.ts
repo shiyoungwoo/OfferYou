@@ -2,9 +2,17 @@ import { readWorkspaceDraft } from "@/lib/services/analysis/workspace-repository
 
 export type WorkspaceSummary = {
   fitScore: number;
+  optimizationMode: "baseline_jd_match" | "talent_amplified";
   strengths: string[];
   gaps: string[];
   riskNotes: string[];
+};
+
+export type WorkspaceMasterFactReference = {
+  id: string;
+  title: string;
+  summary: string;
+  blockType: "summary" | "experience" | "project" | "education" | "skill" | "certificate" | "other";
 };
 
 export type WorkspaceSuggestion = {
@@ -15,6 +23,8 @@ export type WorkspaceSuggestion = {
   afterText: string;
   reasonText: string;
   status: "pending" | "accepted" | "rejected";
+  sourceKind: "resume_baseline" | "master_fact" | "target_role_fit" | "revision";
+  sourceLabel: string;
   revisionRound?: number;
   parentSuggestionId?: string;
   userFeedbackType?: string;
@@ -35,6 +45,19 @@ export type WorkspaceData = {
   jobTitle: string;
   stage: "analysis_ready";
   summary: WorkspaceSummary;
+  talentProfileUsed?: {
+    id: string;
+    headline: string;
+    confidenceNote: string;
+  };
+  careerDirectionUsed?: {
+    id: string;
+    slug: string;
+    label: string;
+    rationale: string;
+    watchOut: string;
+  };
+  masterFactsUsed: WorkspaceMasterFactReference[];
   suggestions: WorkspaceSuggestion[];
   snapshot: WorkspaceSnapshotOutline;
   factSubmissionCount?: number;
@@ -49,6 +72,9 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
       jobTitle: persisted.jobTitle,
       stage: persisted.stage,
       summary: persisted.analysis,
+      talentProfileUsed: persisted.talentProfileUsed,
+      careerDirectionUsed: persisted.careerDirectionUsed,
+      masterFactsUsed: persisted.masterFactsUsed ?? [],
       suggestions: persisted.suggestions,
       factSubmissionCount: persisted.factSubmissions.length,
       snapshot: {
@@ -75,46 +101,54 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
   }
 
   return {
-    company: "OfferYou",
-    jobTitle: "AI Product Manager",
+    company: "Northstar Careers",
+    jobTitle: "Customer Success Lead",
     stage: "analysis_ready",
     summary: {
       fitScore: 74,
+      optimizationMode: "baseline_jd_match",
       strengths: [
-        "Strong workflow design and ambiguity reduction fit the JD core shape.",
-        "Direct product building evidence through OfferYou creates credible category alignment."
+        "The profile shows repeated strength in guiding people through complexity and reducing ambiguity.",
+        "There is credible evidence of structured problem-solving and trust-building work that can transfer into this role."
       ],
       gaps: [
-        "Outcome metrics need sharper framing for AI product hiring standards.",
-        "The current narrative needs clearer user-facing impact in each top block."
+        "The current story still needs stronger evidence of measurable customer or business outcomes.",
+        "Several experiences need to be reframed more clearly around role-relevant responsibility."
       ],
       riskNotes: [
-        "Do not overstate platform ownership if the work was primarily design and orchestration.",
-        "Keep talent claims grounded in evidence instead of identity labels."
+        "Do not overstate readiness if the strongest evidence is still indirect or highly transferable.",
+        "Keep all strength claims anchored to concrete experiences rather than broad identity labels."
       ]
     },
+    talentProfileUsed: undefined,
+    careerDirectionUsed: undefined,
+    masterFactsUsed: [],
     suggestions: [
       {
         id: `${draftId}-s1`,
         section: "project",
-        title: "OfferYou founder block",
-        beforeText: "Designed an AI job-seeking product and completed the MVP protocol and API draft.",
+        title: "Guidance and clarity evidence",
+        beforeText: "Helped people move through unclear processes and turned messy information into actionable next steps.",
         afterText:
-          "Independently designed OfferYou, an AI-assisted resume tailoring workflow with deconstruct, mentor, and snapshot stages, translating a job-seeking pain point into a full MVP protocol and execution model.",
-        reasonText: "This frames the work as product system design rather than a loose side project note.",
+          "Guided people through ambiguity by turning scattered information into clear next steps, showing strong fit for customer-facing workflow and support roles.",
+        reasonText: "This reframes the evidence around user guidance, clarity, and trusted execution.",
         status: "pending",
-        revisionRound: 0
+        revisionRound: 0,
+        sourceKind: "resume_baseline",
+        sourceLabel: "Resume baseline"
       },
       {
         id: `${draftId}-s2`,
         section: "experience",
-        title: "Workflow packaging evidence",
-        beforeText: "Built AI-assisted publishing workflows across several social platforms.",
+        title: "Cross-functional delivery evidence",
+        beforeText: "Coordinated multiple moving parts and kept work progressing across ambiguous requirements.",
         afterText:
-          "Packaged multi-step AI publishing workflows across Xiaohongshu, WeChat, and Weibo, turning repeated cross-platform operations into reusable release systems.",
-        reasonText: "This sharpens system-building evidence and keeps the claim tied to reusable workflow outcomes.",
+          "Worked across shifting requirements to keep delivery moving, showing transferable strength in coordination, follow-through, and customer-facing execution.",
+        reasonText: "This sharpens transferable strengths instead of forcing the profile into a narrow function-specific frame.",
         status: "pending",
-        revisionRound: 0
+        revisionRound: 0,
+        sourceKind: "target_role_fit",
+        sourceLabel: "Role-fit framing"
       }
     ],
     factSubmissionCount: 0,
@@ -124,17 +158,17 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
         {
           title: "Summary",
           itemCount: 1,
-          items: ["AI PM with strong workflow abstraction and operator-style product instincts."]
+          items: ["Candidate with strong guidance, structure, and ambiguity-handling strengths."]
         },
         {
           title: "Projects",
           itemCount: 2,
-          items: ["OfferYou", "Cross-platform AI workflow packaging"]
+          items: ["Guidance and workflow support", "Cross-functional execution evidence"]
         },
         {
           title: "Skills",
           itemCount: 3,
-          items: ["AI product definition", "Workflow design", "Prompt systems"]
+          items: ["Customer guidance", "Workflow clarity", "Structured execution"]
         }
       ]
     }

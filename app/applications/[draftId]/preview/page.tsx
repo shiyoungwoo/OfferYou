@@ -1,6 +1,4 @@
-import { ExportPdfButton } from "@/components/preview/export-pdf-button";
-import { ResumePreview } from "@/components/preview/resume-preview";
-import { TemplateSwitcher } from "@/components/preview/template-switcher";
+import { PreviewWorkspace } from "@/components/preview/preview-workspace";
 import { readSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
 
 type PreviewPageProps = {
@@ -14,30 +12,15 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
   const snapshot = await readSnapshotForDraft(draftId);
 
   return (
-    <main className="min-h-screen bg-[#ebe5d8] px-6 py-10 md:px-10">
-      <section className="mx-auto flex max-w-6xl flex-col gap-6">
-        <header className="rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-card">
-          <p className="text-sm uppercase tracking-[0.3em] text-accent">Preview</p>
-          <h1 className="mt-4 text-4xl font-semibold">A4 snapshot preview</h1>
-          <p className="mt-4 text-sm leading-7 text-slate-700">
-            This page is backed by the generated snapshot document and will become the shared source for PDF export.
-          </p>
-        </header>
-
-        <div className="grid gap-6 xl:grid-cols-[280px_1fr]">
-          <aside className="grid content-start gap-4">
-            <TemplateSwitcher currentTemplate={snapshot?.templateKey ?? "template_a"} />
-            <ExportPdfButton draftId={draftId} />
-          </aside>
-
-          {snapshot ? (
-            <ResumePreview document={snapshot} />
-          ) : (
-            <div className="rounded-[1.5rem] border border-dashed border-line bg-paper p-6 text-sm leading-7 text-slate-700">
-              No snapshot exists yet for this draft. Return to the analysis workspace and generate one first.
-            </div>
-          )}
-        </div>
+    <main className="min-h-screen bg-[#e8e2d6] px-4 py-6">
+      <section className="mx-auto flex max-w-[960px] flex-col gap-4">
+        {snapshot ? (
+          <PreviewWorkspace draftId={draftId} initialDocument={snapshot} />
+        ) : (
+          <div className="rounded-2xl border border-dashed border-line bg-paper p-6 text-sm leading-7 text-slate-700">
+            还没有生成简历初版。先回到分析工作台确认修改建议，再回来预览和导出。
+          </div>
+        )}
       </section>
     </main>
   );

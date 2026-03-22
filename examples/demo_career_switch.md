@@ -1,6 +1,6 @@
-# Demo: Career-Switching to AI Product Manager
+# Demo: Career-Switching to AI Product Manager (Agent Mode)
 
-> This is a **sanitized, real-world example** of OfferYou in action. Names and companies have been changed, but the workflow and results are authentic.
+> This is a **sanitized, real-world example** of OfferYou in **Agent Mode** (prompt-driven). For the Web UI experience, run `pnpm dev` and visit `/applications/new`.
 
 ## 🎯 Scenario
 **Alex** has 3 years of banking operations experience and wants to transition into an **AI Product Manager** role at an EdTech company building AI-powered career guidance tools.

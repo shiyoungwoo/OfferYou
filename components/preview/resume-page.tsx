@@ -7,13 +7,11 @@ type ResumePageProps = {
 
 export function ResumePage({ pageNumber, children }: ResumePageProps) {
   return (
-    <article className="mx-auto w-full max-w-[794px] rounded-[1.5rem] border border-slate-300 bg-white p-10 shadow-[0_30px_60px_rgba(18,32,47,0.16)] print:shadow-none">
-      <div className="grid gap-8">
-        {children}
-        <footer className="border-t border-line pt-4 text-right text-xs uppercase tracking-[0.24em] text-slate-400">
-          Page {pageNumber}
-        </footer>
-      </div>
+    <article className="mx-auto w-[794px] rounded-2xl bg-white px-[52px] py-[44px] shadow-[0_2px_24px_rgba(0,0,0,0.10)] print:w-auto print:rounded-none print:px-0 print:py-0 print:shadow-none">
+      {children}
+      <footer className="mt-6 border-t border-slate-200 pt-3 text-right text-[10px] tracking-[0.2em] text-slate-400 print:mt-4">
+        第 {pageNumber} 页
+      </footer>
     </article>
   );
 }

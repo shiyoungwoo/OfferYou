@@ -1,34 +1,36 @@
 import React from "react";
 
-const stages = ["intake", "analysis_ready", "revising", "snapshot_ready", "preview_ready", "export_ready"] as const;
+const stages = [
+  { key: "intake", label: "输入" },
+  { key: "analysis_ready", label: "分析" },
+  { key: "revising", label: "修改" },
+  { key: "snapshot_ready", label: "快照" },
+  { key: "preview_ready", label: "预览" },
+  { key: "export_ready", label: "导出" }
+] as const;
 
 type ProgressStageBarProps = {
-  stage: (typeof stages)[number] | string;
+  stage: string;
 };
 
 export function ProgressStageBar({ stage }: ProgressStageBarProps) {
-  const activeIndex = stages.findIndex((item) => item === stage);
+  const activeIndex = stages.findIndex((item) => item.key === stage);
 
   return (
-    <section className="rounded-[1.75rem] border border-line bg-white/85 p-5 shadow-card">
-      <div className="flex flex-wrap gap-3">
-        {stages.map((item, index) => {
-          const isComplete = activeIndex >= 0 && index <= activeIndex;
-          return (
-            <div
-              key={item}
-              className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                isComplete ? "border-accent bg-accent text-white" : "border-line bg-paper text-slate-600"
-              }`}
-            >
-              {item}
-            </div>
-          );
-        })}
-      </div>
-      <p className="mt-4 text-sm leading-6 text-slate-600">
-        Current stage: <span className="font-semibold text-ink">{stage}</span>
-      </p>
-    </section>
+    <div className="flex flex-wrap gap-2">
+      {stages.map((item, index) => {
+        const isComplete = activeIndex >= 0 && index <= activeIndex;
+        return (
+          <span
+            key={item.key}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+              isComplete ? "bg-accent text-white" : "border border-line bg-paper text-slate-500"
+            }`}
+          >
+            {item.label}
+          </span>
+        );
+      })}
+    </div>
   );
 }

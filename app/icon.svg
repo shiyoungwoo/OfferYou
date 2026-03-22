@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">OfferYou</title>
+  <desc id="desc">OfferYou app icon</desc>
+  <defs>
+    <linearGradient id="bg" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#101828" />
+      <stop offset="1" stop-color="#1d4ed8" />
+    </linearGradient>
+    <linearGradient id="accent" x1="18" y1="16" x2="46" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fafc" />
+      <stop offset="1" stop-color="#cbd5e1" />
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#bg)" />
+  <path d="M18 44V20h7.5c3.1 0 5.4.6 6.9 1.8 1.6 1.2 2.4 3 2.4 5.5 0 2.4-.8 4.2-2.4 5.4-1.5 1.2-3.8 1.8-6.9 1.8H24v9.5H18zm6-14.5h1.2c1.4 0 2.5-.3 3.2-.8.8-.5 1.2-1.4 1.2-2.6s-.4-2.1-1.2-2.6c-.7-.5-1.8-.8-3.2-.8H24v6.8z" fill="url(#accent)" />
+  <path d="M37 20h5.9l5.6 15.1H54L46.4 20h-5.9l-3.5 9.2L33.5 20H27l7.4 15.1h5.8L37 20z" fill="#f8fafc" opacity=".95" />
+</svg>

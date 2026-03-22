@@ -5,7 +5,7 @@ import { createMasterFact, listMasterFacts } from "@/lib/services/master/master-
 
 export async function GET() {
   const { userId } = getDefaultUserContext();
-  return NextResponse.json({ facts: listMasterFacts(userId) });
+  return NextResponse.json({ facts: await listMasterFacts(userId) });
 }
 
 export async function POST(request: Request) {
@@ -16,6 +16,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const created = createMasterFact(parsed.data);
+  const created = await createMasterFact(parsed.data);
   return NextResponse.json({ fact: created }, { status: 201 });
 }
