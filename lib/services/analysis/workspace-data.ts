@@ -101,23 +101,23 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
   }
 
   return {
-    company: "Northstar Careers",
-    jobTitle: "Customer Success Lead",
+    company: "星北科技",
+    jobTitle: "客户成功负责人",
     stage: "analysis_ready",
     summary: {
       fitScore: 74,
       optimizationMode: "baseline_jd_match",
       strengths: [
-        "The profile shows repeated strength in guiding people through complexity and reducing ambiguity.",
-        "There is credible evidence of structured problem-solving and trust-building work that can transfer into this role."
+        "过往经历多次展现出在复杂环境中引导他人、降低项目不确定性的强项。",
+        "有充分证据表明其具备结构化解决问题和建立信任的能力，且高度可迁移至该岗位。"
       ],
       gaps: [
-        "The current story still needs stronger evidence of measurable customer or business outcomes.",
-        "Several experiences need to be reframed more clearly around role-relevant responsibility."
+        "当前的表述仍需要更强有力的、可量化的客户或业务成果作为支撑。",
+        "部分经历需要围绕目标岗位的核心职责进行更清晰的重构。"
       ],
       riskNotes: [
-        "Do not overstate readiness if the strongest evidence is still indirect or highly transferable.",
-        "Keep all strength claims anchored to concrete experiences rather than broad identity labels."
+        "如果最强的证据仍是间接或通用能力，建议不要过度夸大直接胜任度。",
+        "确保所有关于优势的描述都锚定在具体经历上，避免使用空泛的自我评估标签。"
       ]
     },
     talentProfileUsed: undefined,
@@ -127,28 +127,28 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
       {
         id: `${draftId}-s1`,
         section: "project",
-        title: "Guidance and clarity evidence",
-        beforeText: "Helped people move through unclear processes and turned messy information into actionable next steps.",
+        title: "体现引导与梳理能力",
+        beforeText: "帮助团队梳理不清晰的流程，把杂乱的信息转化为可执行的下一步。",
         afterText:
-          "Guided people through ambiguity by turning scattered information into clear next steps, showing strong fit for customer-facing workflow and support roles.",
-        reasonText: "This reframes the evidence around user guidance, clarity, and trusted execution.",
+          "在充满不确定性的环境中引导团队，将零散信息转化为清晰的执行步骤，展现出极强的抗压梳理能力和面向客户的工作流支持能力。",
+        reasonText: "这样重构能更好地突出你在用户引导、梳理复杂信息和建立信任方面的优势。",
         status: "pending",
         revisionRound: 0,
         sourceKind: "resume_baseline",
-        sourceLabel: "Resume baseline"
+        sourceLabel: "简历原文"
       },
       {
         id: `${draftId}-s2`,
         section: "experience",
-        title: "Cross-functional delivery evidence",
-        beforeText: "Coordinated multiple moving parts and kept work progressing across ambiguous requirements.",
+        title: "跨部门协作交付",
+        beforeText: "协调各部门推进工作，在需求不明确的情况下保持项目进展。",
         afterText:
-          "Worked across shifting requirements to keep delivery moving, showing transferable strength in coordination, follow-through, and customer-facing execution.",
-        reasonText: "This sharpens transferable strengths instead of forcing the profile into a narrow function-specific frame.",
+          "在不断变化的需求中跨团队协调推进交付，展现出在复杂协作、持续跟进执行和面向客户交付维度的可迁移优势。",
+        reasonText: "跳出特定职能框架，重点强化你能平移到新岗位的底层通用能力。",
         status: "pending",
         revisionRound: 0,
         sourceKind: "target_role_fit",
-        sourceLabel: "Role-fit framing"
+        sourceLabel: "岗位适配分析"
       }
     ],
     factSubmissionCount: 0,
@@ -156,19 +156,19 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
       pageEstimate: 2,
       sections: [
         {
-          title: "Summary",
+          title: "核心优势",
           itemCount: 1,
-          items: ["Candidate with strong guidance, structure, and ambiguity-handling strengths."]
+          items: ["具备出色的引导力、结构化梳理能力以及应对复杂模糊环境的优势。"]
         },
         {
-          title: "Projects",
+          title: "项目经历",
           itemCount: 2,
-          items: ["Guidance and workflow support", "Cross-functional execution evidence"]
+          items: ["工作流搭建与团队支持", "跨部门协作执行案例"]
         },
         {
-          title: "Skills",
+          title: "专业技能",
           itemCount: 3,
-          items: ["Customer guidance", "Workflow clarity", "Structured execution"]
+          items: ["客户需求引导", "业务流梳理", "结构化执行落地"]
         }
       ]
     }

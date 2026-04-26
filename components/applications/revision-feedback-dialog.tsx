@@ -59,7 +59,7 @@ export function RevisionFeedbackDialog({
     <div className="mt-4 rounded-[1.35rem] border border-accent/20 bg-accent/5 p-4">
       <div className="grid gap-4">
         <label className="grid gap-2 text-sm font-medium text-slate-700">
-          Feedback type
+          反馈类型
           <select
             className="rounded-2xl border border-line bg-white px-4 py-3 text-sm"
             onChange={(event) => setFeedbackType(event.target.value as (typeof feedbackOptions)[number])}
@@ -67,18 +67,18 @@ export function RevisionFeedbackDialog({
           >
             {feedbackOptions.map((option) => (
               <option key={option} value={option}>
-                {option}
+                {getFeedbackLabel(option)}
               </option>
             ))}
           </select>
         </label>
 
         <label className="grid gap-2 text-sm font-medium text-slate-700">
-          Feedback text
+          反馈内容
           <textarea
             className="min-h-28 rounded-2xl border border-line bg-white px-4 py-3 text-sm"
             onChange={(event) => setFeedbackText(event.target.value)}
-            placeholder="Tell OfferYou how this suggestion should change, or add real source material."
+            placeholder="说明这条建议要怎么改，或者补充真实来源材料。"
             value={feedbackText}
           />
         </label>
@@ -90,17 +90,36 @@ export function RevisionFeedbackDialog({
             onClick={submitRevision}
             type="button"
           >
-            Submit Revision
+            提交反馈
           </button>
           <button
             className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700"
             onClick={onClose}
             type="button"
           >
-            Cancel
+            取消
           </button>
         </div>
       </div>
     </div>
   );
+}
+
+function getFeedbackLabel(option: (typeof feedbackOptions)[number]) {
+  switch (option) {
+    case "too_generic":
+      return "太泛";
+    case "too_aggressive":
+      return "太激进";
+    case "not_my_style":
+      return "不像我的风格";
+    case "fact_inaccurate":
+      return "事实不准";
+    case "wrong_focus":
+      return "重点不对";
+    case "adding_new_fact":
+      return "新增了事实";
+    case "custom":
+      return "自定义";
+  }
 }

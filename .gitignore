@@ -8,3 +8,6 @@ test-results
 prisma/dev.db
 prisma/dev.db-journal
 /storage
+tsconfig.tsbuildinfo
+/docs/quality/job-apply-fixture-artifacts/
+/docs/quality/offeryou-real-trial-artifacts/

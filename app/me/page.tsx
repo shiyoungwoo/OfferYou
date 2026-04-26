@@ -1,6 +1,12 @@
 import Link from "next/link";
 import type { Route } from "next";
+import { existsSync } from "node:fs";
+import { readdir } from "node:fs/promises";
+import path from "node:path";
 import { getDefaultUserContext } from "@/lib/default-user";
+import { ModelProviderStatusCard } from "@/components/me/model-provider-status-card";
+import { SelfUseReadinessCard } from "@/components/me/self-use-readiness-card";
+import { getAvailableModelProviders } from "@/lib/ai/model-provider-config";
 import { listApplicationRecords } from "@/lib/services/applications/application-record-service";
 import { listMasterFacts } from "@/lib/services/master/master-service";
 import {
@@ -16,6 +22,10 @@ export default async function MePage() {
   const careerNavigation = await getLatestConfirmedCareerNavigation(userId);
   const masterFacts = await listMasterFacts(userId);
   const applicationRecords = await listApplicationRecords();
+  const reportPath = path.join(process.cwd(), "docs", "quality", "job-apply-fixture-outputs.md");
+  const artifactRoot = path.join(process.cwd(), "docs", "quality", "job-apply-fixture-artifacts");
+  const fixturePdfCount = await countFixturePdfs(artifactRoot);
+  const interviewPrepCount = applicationRecords.filter((record) => Boolean(record.interviewPrepId)).length;
 
   return (
     <main className="min-h-screen px-6 py-10 md:px-10">
@@ -33,6 +43,16 @@ export default async function MePage() {
             <MetricPill label="简历记录" value={String(applicationRecords.length)} />
           </div>
         </header>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <ModelProviderStatusCard providers={getAvailableModelProviders()} />
+          <SelfUseReadinessCard
+            applicationRecordCount={applicationRecords.length}
+            fixturePdfCount={fixturePdfCount}
+            hasFixtureReport={existsSync(reportPath)}
+            interviewPrepCount={interviewPrepCount}
+          />
+        </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
           <InfoCard
@@ -167,8 +187,8 @@ function InfoCard({
     <section className="rounded-[1.75rem] border border-line bg-white/85 p-6 shadow-card">
       <h2 className="text-2xl font-semibold">{title}</h2>
       <ul className="mt-4 grid gap-3 text-sm leading-6 text-slate-700">
-        {items.map((item) => (
-          <li key={item} className="rounded-[1.1rem] bg-paper px-4 py-3">
+        {items.map((item, index) => (
+          <li key={`${title}-${index}`} className="rounded-[1.1rem] bg-paper px-4 py-3">
             {item}
           </li>
         ))}
@@ -219,4 +239,27 @@ function formatAppliedAt(value: string) {
   }
 
   return parsed.toISOString().slice(0, 10);
+}
+
+async function countFixturePdfs(rootDir: string) {
+  if (!existsSync(rootDir)) {
+    return 0;
+  }
+
+  const entries = await readdir(rootDir, { withFileTypes: true });
+  let count = 0;
+
+  for (const entry of entries) {
+    const entryPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      count += await countFixturePdfs(entryPath);
+      continue;
+    }
+
+    if (entry.isFile() && entry.name.toLowerCase().endsWith(".pdf")) {
+      count += 1;
+    }
+  }
+
+  return count;
 }

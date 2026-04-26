@@ -38,25 +38,46 @@ export default async function NewApplicationPage({ searchParams }: NewApplicatio
   });
 
   return (
-    <main className="min-h-screen px-6 py-10 md:px-10">
-      <section className="mx-auto flex max-w-5xl flex-col gap-6">
-        <header className="rounded-[2rem] border border-white/70 bg-white/85 p-8 shadow-card">
-          <p className="text-sm uppercase tracking-[0.3em] text-accent">New Application</p>
-          <h1 className="mt-4 text-4xl font-semibold">先改简历，再决定要不要继续深挖自己。</h1>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-700">
-            这是 OfferYou 的主工作台。先输入岗位和初版简历，右侧会给出匹配判断、优势点和修改建议。客户确认后，再进入正式分析工作台生成优化简历。
-          </p>
-          {laneCallout ? (
-            <div className="mt-6 rounded-[1.4rem] border border-accent/20 bg-accent/5 px-5 py-4 text-sm leading-6 text-slate-700">
-              <p className="font-semibold text-slate-900">Current lane: {laneCallout.laneLabel}</p>
-              <p className="mt-2">Strength signal: {laneCallout.strengthHint}</p>
-              <p className="mt-2">Risk reminder: {laneCallout.riskHint}</p>
-            </div>
-          ) : null}
-        </header>
+    <main className="p-8 max-w-7xl mx-auto w-full h-full flex flex-col">
+      <div className="mb-8">
+        <p className="text-sm uppercase tracking-[0.28em] text-accent">job-apply / 岗位定制</p>
+        <h1 className="mt-3 text-3xl font-bold text-gray-900 md:text-4xl">
+          先判断岗位值不值得投，再生成一版可导出的快照简历。
+        </h1>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+          当前工作台严格参考 `job-apply` 原型：先做差距分析，再给出逐条建议，最后生成不污染主档的岗位快照。天赋发现会增强判断，但不会阻塞第一条投递链路。
+        </p>
 
+        {laneCallout ? (
+          <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm leading-6 text-blue-900">
+            <p className="font-bold flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>
+              已选方向：{laneCallout.laneLabel}
+            </p>
+            <p className="mt-1 opacity-90">优势提醒：{laneCallout.strengthHint}</p>
+            <p className="opacity-90">风险提醒：{laneCallout.riskHint}</p>
+          </div>
+        ) : null}
+
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-black/5 bg-white/80 px-5 py-4 shadow-card">
+            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Step 1</p>
+            <p className="mt-2 text-sm leading-6 text-slate-700">输入 JD 与现有简历，先拿到差距分析与匹配判断。</p>
+          </div>
+          <div className="rounded-2xl border border-black/5 bg-white/80 px-5 py-4 shadow-card">
+            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Step 2</p>
+            <p className="mt-2 text-sm leading-6 text-slate-700">逐条查看改写建议，新增事实先进入待确认队列。</p>
+          </div>
+          <div className="rounded-2xl border border-black/5 bg-white/80 px-5 py-4 shadow-card">
+            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Step 3</p>
+            <p className="mt-2 text-sm leading-6 text-slate-700">生成岗位快照，确认无误后导出 PDF 并沉淀投递记录。</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0">
         <NewApplicationForm draftDefaults={draftDefaults} selectedLane={lane} />
-      </section>
+      </div>
     </main>
   );
 }

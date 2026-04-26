@@ -1,9 +1,7 @@
-import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { runCommand } from "@/lib/services/ingestion/command-runner";
 
 type UploadTextInput = {
   buffer: Buffer;
@@ -31,10 +29,6 @@ export async function extractTextFromResumeSource(input: { content?: string; raw
     if (extraction.extractedText.trim()) {
       return extraction.extractedText;
     }
-  }
-
-  if (input.rawReference) {
-    return `Extracted placeholder text from ${input.rawReference}`;
   }
 
   return "";
@@ -84,7 +78,7 @@ export async function extractTextFromStoredAsset(input: {
   });
 }
 
-export function extractTextFromUploadedBuffer(input: UploadTextInput): UploadedTextExtraction {
+export async function extractTextFromUploadedBuffer(input: UploadTextInput): Promise<UploadedTextExtraction> {
   const normalizedMimeType = input.mimeType.toLowerCase();
   const filename = input.filename.toLowerCase();
 
@@ -96,17 +90,7 @@ export function extractTextFromUploadedBuffer(input: UploadTextInput): UploadedT
   }
 
   if (normalizedMimeType === "application/pdf" || filename.endsWith(".pdf")) {
-    const extractedText = extractPdfText(input.buffer);
-
-    return extractedText
-      ? {
-          extractedText,
-          extractionState: "partial_text"
-        }
-      : {
-          extractedText: "",
-          extractionState: "stored_only"
-        };
+    return extractPdfTextFromBuffer(input.buffer, input.filename);
   }
 
   return {
@@ -117,7 +101,7 @@ export function extractTextFromUploadedBuffer(input: UploadTextInput): UploadedT
 
 async function extractWordText(assetPath: string) {
   try {
-    const { stdout } = await execFileAsync("/usr/bin/textutil", ["-convert", "txt", "-stdout", assetPath]);
+    const { stdout } = await runCommand("/usr/bin/textutil", ["-convert", "txt", "-stdout", assetPath]);
     return stdout.trim();
   } catch {
     return "";
@@ -127,49 +111,177 @@ async function extractWordText(assetPath: string) {
 async function extractImageText(assetPath: string) {
   try {
     const scriptPath = path.join(process.cwd(), "scripts", "ocr_image.swift");
-    const { stdout } = await execFileAsync("/usr/bin/swift", [scriptPath, assetPath]);
+    const { stdout } = await runCommand("/usr/bin/swift", [scriptPath, assetPath]);
     return stdout.trim();
   } catch {
     return "";
   }
 }
 
-function extractPdfText(buffer: Buffer) {
+function isGibberish(text: string): boolean {
+  if (text.length < 50) return false;
+  // Many PDF CID font mapping errors output Cyrillic or special characters
+  const cyrillicCount = (text.match(/[\u0400-\u04FF]/g) || []).length;
+  if (cyrillicCount > 10) return true;
+
+  // Normal text should have a reasonable amount of CJK or Latin characters
+  const validCount = (text.match(/[\u4e00-\u9fa5a-zA-Z0-9]/g) || []).length;
+  if (validCount < text.length * 0.2) return true;
+
+  return false;
+}
+
+async function extractPdfTextFromBuffer(buffer: Buffer, filename: string): Promise<UploadedTextExtraction> {
+  if (!isLikelyCompletePdfBuffer(buffer)) {
+    const fallbackText = extractPdfTextRawFallback(buffer);
+    if (fallbackText && !isGibberish(fallbackText)) {
+      return {
+        extractedText: fallbackText,
+        extractionState: "partial_text"
+      };
+    }
+
+    return {
+      extractedText: "",
+      extractionState: "stored_only"
+    };
+  }
+
+  const openDataLoaderExtraction = await extractPdfTextWithOpenDataLoader(buffer, filename);
+  if (openDataLoaderExtraction && !isGibberish(openDataLoaderExtraction.extractedText)) {
+    return openDataLoaderExtraction;
+  }
+
+  try {
+    const { default: pdfParse } = await import("pdf-parse/lib/pdf-parse.js");
+    const data = await pdfParse(buffer);
+    const text = data.text?.trim();
+    if (text && text.length > 20 && !isGibberish(text)) {
+      if (process.env.OFFERYOU_DEBUG_INGESTION === "1") {
+        console.log(`[OfferYou] pdf-parse extracted ${text.length} chars from ${data.numpages} pages`);
+      }
+      return {
+        extractedText: text,
+        extractionState: "full_text"
+      };
+    }
+  } catch (error) {
+    console.error("[OfferYou] pdf-parse failed:", error);
+  }
+
+  const fallbackText = extractPdfTextRawFallback(buffer);
+  if (fallbackText && !isGibberish(fallbackText)) {
+    return {
+      extractedText: fallbackText,
+      extractionState: "partial_text"
+    };
+  }
+
+  return {
+    extractedText: "",
+    extractionState: "stored_only"
+  };
+}
+
+async function extractPdfTextWithOpenDataLoader(buffer: Buffer, filename: string): Promise<UploadedTextExtraction | null> {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "offeryou-opendataloader-"));
+  const inputPath = path.join(tempDir, path.basename(filename || "document.pdf"));
+  const outputDir = path.join(tempDir, "output");
+
+  try {
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(inputPath, buffer);
+
+    await runCommand(
+      "opendataloader-pdf",
+      [inputPath, "--output-dir", outputDir, "--format", "markdown,text", "--use-struct-tree", "--quiet"],
+      {
+        timeout: 60_000,
+        maxBuffer: 10 * 1024 * 1024
+      }
+    );
+
+    const extractedFile = await findFirstTextOutputFile(outputDir);
+    if (!extractedFile) {
+      return null;
+    }
+
+    const extractedText = (await readFile(extractedFile, "utf-8")).trim();
+    if (!extractedText) {
+      return null;
+    }
+
+    return {
+      extractedText,
+      extractionState: extractedText.length > 20 ? "full_text" : "partial_text"
+    };
+  } catch {
+    return null;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function findFirstTextOutputFile(rootDir: string): Promise<string | null> {
+  const queue = [rootDir];
+
+  while (queue.length > 0) {
+    const currentDir = queue.shift();
+    if (!currentDir) {
+      continue;
+    }
+
+    const entries = await readdir(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const absolutePath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        queue.push(absolutePath);
+        continue;
+      }
+
+      if (entry.isFile() && isExtractedTextFile(entry.name)) {
+        return absolutePath;
+      }
+    }
+  }
+
+  return null;
+}
+
+function isExtractedTextFile(filename: string) {
+  const normalized = filename.toLowerCase();
+  return normalized.endsWith(".md") || normalized.endsWith(".markdown") || normalized.endsWith(".txt");
+}
+
+function isLikelyCompletePdfBuffer(buffer: Buffer): boolean {
+  const head = buffer.subarray(0, Math.min(buffer.length, 2048)).toString("latin1");
+  const tail = buffer.subarray(Math.max(0, buffer.length - 8192)).toString("latin1");
+
+  return head.includes("%PDF-") && tail.includes("%%EOF");
+}
+
+function extractPdfTextRawFallback(buffer: Buffer): string {
   const latin1 = buffer.toString("latin1");
   const fragments: string[] = [];
   const matches = latin1.matchAll(/\(([^()]*)\)\s*Tj/g);
 
   for (const match of matches) {
-    const decoded = decodePdfTextFragment(match[1]);
+    const decoded = match[1]
+      .replace(/\\\(/g, "(")
+      .replace(/\\\)/g, ")")
+      .replace(/\\n/g, " ")
+      .replace(/\\r/g, " ")
+      .replace(/\\t/g, " ")
+      .replace(/\\\\/g, "\\")
+      .replace(/\\([0-7]{3})/g, (_m, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)))
+      .replace(/\s+/g, " ")
+      .trim();
     if (decoded.length >= 3) {
       fragments.push(decoded);
     }
   }
 
-  if (fragments.length === 0) {
-    const fallback = latin1
-      .replace(/[^\x20-\x7E]/g, " ")
-      .split(/\s+/)
-      .filter((token) => token.length >= 4)
-      .slice(0, 120);
-
-    return fallback.join(" ").trim();
-  }
-
   return fragments.join(" ").replace(/\s+/g, " ").trim();
-}
-
-function decodePdfTextFragment(fragment: string) {
-  return fragment
-    .replace(/\\\(/g, "(")
-    .replace(/\\\)/g, ")")
-    .replace(/\\n/g, " ")
-    .replace(/\\r/g, " ")
-    .replace(/\\t/g, " ")
-    .replace(/\\\\/g, "\\")
-    .replace(/\\([0-7]{3})/g, (_match, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)))
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function inferMimeTypeFromFilename(filename: string) {

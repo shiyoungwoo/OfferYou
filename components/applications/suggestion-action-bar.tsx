@@ -5,6 +5,7 @@ import React, { useTransition } from "react";
 type SuggestionActionBarProps = {
   draftId: string;
   suggestionId: string;
+  onEdit: () => void;
   onRevise: () => void;
   onActionComplete: () => Promise<void> | void;
 };
@@ -12,6 +13,7 @@ type SuggestionActionBarProps = {
 export function SuggestionActionBar({
   draftId,
   suggestionId,
+  onEdit,
   onRevise,
   onActionComplete
 }: SuggestionActionBarProps) {
@@ -39,15 +41,15 @@ export function SuggestionActionBar({
         onClick={() => runSimpleAction("accept")}
         type="button"
       >
-        Accept
+        接受
       </button>
       <button
         className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
         disabled={isPending}
-        onClick={onRevise}
+        onClick={onEdit}
         type="button"
       >
-        Revise
+        编辑
       </button>
       <button
         className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
@@ -55,7 +57,15 @@ export function SuggestionActionBar({
         onClick={() => runSimpleAction("reject")}
         type="button"
       >
-        Reject
+        拒绝
+      </button>
+      <button
+        className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+        disabled={isPending}
+        onClick={onRevise}
+        type="button"
+      >
+        继续微调
       </button>
     </div>
   );

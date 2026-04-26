@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ApplicationRecord } from "@/lib/services/applications/application-record-service";
 
 type ApplicationRecordPanelProps = {
@@ -16,10 +17,29 @@ export function ApplicationRecordPanel({ record }: ApplicationRecordPanelProps) 
         <RecordCard label="Accepted Suggestions" value={String(record.acceptedSuggestionCount)} />
         <RecordCard label="Draft" value={record.draftId} />
         <RecordCard label="Snapshot" value={record.snapshotId} />
+        <RecordCard label="Interview Status" value={renderInterviewStatus(record.interviewStatus)} />
       </div>
 
       <div className="mt-6 rounded-[1.35rem] border border-line bg-paper p-5 text-sm leading-6 text-slate-700">
         Export artifact: {record.exportStoragePath ?? "No PDF export path recorded."}
+      </div>
+
+      <div className="mt-6 rounded-[1.35rem] border border-line bg-white p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Interview Prep</p>
+            <h2 className="mt-2 text-xl font-semibold text-slate-900">从这条投递记录进入面试准备</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-700">
+              系统会自动带入公司、岗位、快照和已确认事实，避免重复输入。
+            </p>
+          </div>
+          <Link
+            className="inline-flex items-center justify-center rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-900"
+            href={`/prep?recordId=${encodeURIComponent(record.id)}`}
+          >
+            准备面试
+          </Link>
+        </div>
       </div>
 
       <div className="mt-6 rounded-[1.35rem] border border-line bg-paper p-5">
@@ -60,4 +80,17 @@ function RecordCard({ label, value }: { label: string; value: string }) {
       <p className="mt-3 text-sm leading-6 text-slate-700">{value}</p>
     </article>
   );
+}
+
+function renderInterviewStatus(status?: ApplicationRecord["interviewStatus"]) {
+  switch (status) {
+    case "preparing":
+      return "准备中";
+    case "scheduled":
+      return "已安排";
+    case "finished":
+      return "已完成";
+    default:
+      return "未开始";
+  }
 }

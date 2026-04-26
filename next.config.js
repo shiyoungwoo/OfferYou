@@ -1,6 +1,7 @@
 /** @type {import("next").NextConfig} */
 const nextConfig = {
   typedRoutes: true,
+  serverExternalPackages: ["@playwright/test", "playwright", "playwright-core"],
   webpack(config, { dev }) {
     if (dev) {
       // This repo lives in an iCloud-synced folder, and Next's filesystem cache

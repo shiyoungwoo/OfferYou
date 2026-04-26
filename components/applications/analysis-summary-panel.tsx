@@ -25,6 +25,7 @@ export function AnalysisSummaryPanel({
   careerDirectionUsed
 }: AnalysisSummaryPanelProps) {
   const verdict = getVerdict(summary.fitScore);
+  const hasAlignmentContext = Boolean(talentProfileUsed || careerDirectionUsed);
 
   return (
     <section className="rounded-2xl border border-line bg-white/85 p-5 shadow-card">
@@ -35,6 +36,24 @@ export function AnalysisSummaryPanel({
       </div>
 
       <p className="mt-4 rounded-xl bg-paper px-3 py-2 text-sm leading-6 text-slate-700">{verdict.message}</p>
+
+      {hasAlignmentContext ? (
+        <div className="mt-4 rounded-xl border border-black/5 bg-paper px-4 py-3 text-sm leading-6 text-slate-700">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">天赋对齐视角</p>
+          <p className="mt-2">
+            本次判断已经纳入已确认的优势档案与职业方向，不只是关键词匹配。
+          </p>
+          {talentProfileUsed ? (
+            <p className="mt-2">优势档案：{talentProfileUsed.headline}</p>
+          ) : null}
+          {careerDirectionUsed ? (
+            <p className="mt-2">当前方向：{careerDirectionUsed.label}</p>
+          ) : null}
+          {masterFactsUsed.length > 0 ? (
+            <p className="mt-2">已复用事实：{masterFactsUsed.length} 条</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-4 space-y-3">
         <CompactList title="优势" items={summary.strengths} />

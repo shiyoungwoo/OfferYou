@@ -11,7 +11,7 @@ describe("composeSnapshotDocument", () => {
       language: "en",
       stage: "analysis_ready",
       status: "created",
-      jdPreview: "preview",
+      jdPreview: "Prompt 编写与迭代，开发用于模型训练的高质量数据生成 Prompt，协同产品、研发、设计及数据团队推动 AI 对话产品迭代。",
       jdAsset: {
         storagePath: "/tmp/jd.txt",
         mimeType: "text/plain",
@@ -34,6 +34,8 @@ describe("composeSnapshotDocument", () => {
           afterText: "Built AI product workflow",
           reasonText: "Reason",
           status: "accepted",
+          sourceKind: "master_fact",
+          sourceLabel: "Master fact: Role-fit framing",
           revisionRound: 0
         },
         {
@@ -44,24 +46,25 @@ describe("composeSnapshotDocument", () => {
           afterText: "Ignored text",
           reasonText: "Reason",
           status: "rejected",
+          sourceKind: "master_fact",
+          sourceLabel: "Master fact: Role-fit framing",
           revisionRound: 0
         }
       ],
-      factSubmissions: []
+      factSubmissions: [],
+      masterFactsUsed: []
     });
 
     expect(JSON.stringify(document)).toContain("Built AI product workflow");
     expect(JSON.stringify(document)).not.toContain("Ignored text");
     expect(document.sections.map((section) => section.title)).toEqual([
+      "个人信息",
       "个人优势",
       "工作经历",
-      "实习经历",
       "项目经历",
-      "教育经历",
-      "证书 / 技能"
+      "教育背景"
     ]);
     expect(document.header.title).toBe("AI Product Manager");
-    expect(document.header.photo?.label).toBe("照片");
   });
 
   it("uses confirmed talent signals to shape the preview resume content", async () => {
@@ -73,7 +76,7 @@ describe("composeSnapshotDocument", () => {
       language: "zh",
       stage: "analysis_ready",
       status: "created",
-      jdPreview: "preview",
+      jdPreview: "客户成功经理负责客户 onboarding、客户关系维护、跨团队交付推进和续约增长。",
       jdAsset: {
         storagePath: "/tmp/jd.txt",
         mimeType: "text/plain",
@@ -120,6 +123,10 @@ describe("composeSnapshotDocument", () => {
     expect(document.header.name).toBe("王小明");
     expect(JSON.stringify(document)).toContain("天然擅长在复杂情境下建立信任并推动事情落地");
     expect(JSON.stringify(document)).toContain("稳定客户预期并推动团队按节奏交付");
+    expect(JSON.stringify(document.sections.find((section) => section.id === "personal-info")?.items)).toContain(
+      "求职意向：客户成功经理"
+    );
+    expect(document.sections.some((section) => section.id === "certificates-skills")).toBe(false);
     expect(document.sections.find((section) => section.id === "education")?.items[0]).toEqual({
       type: "text",
       text: "请补充教育背景、专业、毕业时间或代表性课程。"
@@ -135,7 +142,7 @@ describe("composeSnapshotDocument", () => {
       language: "zh",
       stage: "analysis_ready",
       status: "created",
-      jdPreview: "preview",
+      jdPreview: "Prompt 编写与迭代，开发用于模型训练的高质量数据生成 Prompt，协同产品、研发、设计及数据团队推动 AI 对话产品迭代。",
       jdAsset: {
         storagePath: "/tmp/jd.txt",
         mimeType: "text/plain",
@@ -144,10 +151,10 @@ describe("composeSnapshotDocument", () => {
       resumeExtractedText: `李四
 13800000000
 工作经历
-2021.03-2023.08 某科技有限公司 运营经理 负责搭建 SOP 并推进跨团队项目落地
-实习经历
-2019.06-2019.09 某咨询公司 实习生 协助完成用户访谈和竞品研究
-• 输出竞品分析摘要并支持交付汇报
+      2021.03-2023.08 某科技有限公司 运营经理 负责搭建 SOP 并推进跨团队项目落地
+      实习经历
+      2019.06-2019.09 某咨询公司 实习生 协助完成用户访谈和竞品研究
+      • 输出竞品分析摘要并支持交付汇报
 教育经历
 2016-2020 复旦大学 市场营销 本科
 项目经历
@@ -161,9 +168,9 @@ describe("composeSnapshotDocument", () => {
         gaps: ["需要更强量化结果"],
         riskNotes: ["不要夸大管理范围"]
       },
-      masterFactsUsed: [],
       suggestions: [],
-      factSubmissions: []
+      factSubmissions: [],
+      masterFactsUsed: []
     });
 
     expect(document.sections.find((section) => section.id === "work-experience")?.items[0]).toMatchObject({
@@ -172,21 +179,175 @@ describe("composeSnapshotDocument", () => {
       subheading: "运营经理",
       meta: "2021.03-2023.08"
     });
-    expect(document.sections.find((section) => section.id === "internship-experience")?.items[0]).toMatchObject({
-      type: "entry",
-      heading: "某咨询公司",
-      subheading: "实习生",
-      meta: "2019.06-2019.09"
-    });
-    expect(document.sections.find((section) => section.id === "internship-experience")?.items[0]).toMatchObject({
-      bullets: ["输出竞品分析摘要并支持交付汇报"]
-    });
+    expect(document.sections.some((section) => section.id === "internship-experience")).toBe(false);
     expect(document.sections.find((section) => section.id === "education")?.items[0]).toMatchObject({
       type: "entry",
       heading: "复旦大学",
       subheading: "市场营销 ｜ 本科",
       meta: "2016-2020"
     });
-    expect(JSON.stringify(document.sections.find((section) => section.id === "certificates-skills")?.items)).toContain("Excel");
+    expect(JSON.stringify(document.sections.find((section) => section.id === "personal-info")?.items)).toContain(
+      "手机：13800000000"
+    );
+    expect(JSON.stringify(document.sections.find((section) => section.id === "personal-info")?.items)).toContain(
+      "学历：复旦大学 · 本科"
+    );
+    expect(document.sections.find((section) => section.id === "project-experience")?.items[0]).toMatchObject({
+      type: "entry",
+      heading: "从0到1搭建用户增长项目并完成首轮验证"
+    });
+  });
+
+  it("extracts the candidate name and sections from a markdown resume with frontmatter", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-4",
+      userId: "default-user",
+      company: "OfferYou",
+      jobTitle: "AI 产品经理",
+      language: "zh",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "preview",
+      jdAsset: {
+        storagePath: "/tmp/jd.txt",
+        mimeType: "text/plain",
+        originalFilename: "jd.txt"
+      },
+      resumeExtractedText: `---
+title: 简历助手重制
+type: resume-snapshot
+---
+# 吴世阳
+
+18513449520 | wsyoung@example.com
+GitHub：github.com/shiyoungwoo/OfferYou
+作品集：OfferYou 项目案例 / AIPM Notebook
+
+## 项目经历
+### OfferYou - AI 岗位定制简历助手
+- 独立完成产品定义与 MVP 范围收敛
+- 输出完整的输入输出协议与 API 草案
+
+## 技能与证书
+Prompt Engineering / Obsidian / AI Agent`,
+      analysis: {
+        fitScore: 90,
+        optimizationMode: "baseline_jd_match",
+        strengths: ["善于把复杂问题拆解成可执行步骤"],
+        gaps: ["需要更强的岗位表达"],
+        riskNotes: ["保持事实准确"]
+      },
+      suggestions: [],
+      factSubmissions: [],
+      masterFactsUsed: []
+    });
+
+    expect(document.header.name).toBe("吴世阳");
+    expect(document.header.contacts).toEqual([
+      "wsyoung@example.com",
+      "18513449520",
+      "github.com/shiyoungwoo/OfferYou",
+      "OfferYou 项目案例 / AIPM Notebook"
+    ]);
+    expect(JSON.stringify(document.sections.find((section) => section.id === "project-experience")?.items)).toContain("OfferYou");
+  });
+
+  it("keeps OCR PDF resume sections and accepted Chinese-section suggestions in the snapshot", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-5",
+      userId: "default-user",
+      company: "OfferYou 示例岗位",
+      jobTitle: "客户成功经理",
+      language: "zh",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "Prompt 编写与迭代，开发用于模型训练的高质量数据生成 Prompt，协同产品、研发、设计及数据团队推动 AI 对话产品迭代。",
+      jdAsset: {
+        storagePath: "/tmp/jd.txt",
+        mimeType: "text/plain",
+        originalFilename: "jd.txt"
+      },
+      resumeExtractedText: `2026/3/11 00:26吴世阳 - AI产品经理简历
+第1/2⻚file:///tmp/resume-ai-pm.html
+吴 世 阳
+男 | 31岁 | 共产党员 | 18513449520 | 434995517@qq.com
+求职意向：AI 产品经理 / 大数据产品经理
+个 人 优 势
+AI 产品实践者：正在独立设计 AI 求职辅助产品$O&erYou$，已完成 MVP 产品协议设计。
+项 目 经 历
+O"erYou ) AI 岗位定制简历助手 （个人产品项目）2026.03 - 至今
+独立完成产品定义与 MVP 范围收敛
+输出完整的产品输入输出协议文档
+工 作 经 历
+陕西怡阳医疗科技有限公司 % 数据工程师2025.09 - 2025.11
+基于需求分析设计多变量控制实验方案
+广发银行北京分行 % 综合柜员岗2022.08 - 2025.08
+B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门产品讲解与方案推介
+教 育 经 历
+对外经济贸易大学 | 硕士 | 全球价值链（应用经济学）
+2020 - 2022`,
+      analysis: {
+        fitScore: 88,
+        optimizationMode: "baseline_jd_match",
+        strengths: ["具备客户服务与 AI 产品实践交叉经验"],
+        gaps: ["需要把客户成功相关经历前置"],
+        riskNotes: ["不要夸大直接产品职责"]
+      },
+      suggestions: [
+        {
+          id: "ai-1",
+          section: "项目经历",
+          title: "项目改写",
+          beforeText: "独立完成产品定义与 MVP 范围收敛",
+          afterText: "围绕客户成功经理岗位，突出 OfferYou 项目中的需求拆解、Prompt 迭代和用户反馈整理。",
+          reasonText: "匹配 JD 对 Prompt 编写与客户反馈的要求。",
+          status: "accepted",
+          sourceKind: "target_role_fit",
+          sourceLabel: "Role-fit framing",
+          revisionRound: 0
+        },
+        {
+          id: "ai-2",
+          section: "个人优势",
+          title: "优势改写",
+          beforeText: "AI 产品实践者",
+          afterText: "AI 产品与客户反馈理解能力并重，能把复杂需求整理为可执行方案。",
+          reasonText: "匹配客户成功岗位的沟通和方案能力。",
+          status: "accepted",
+          sourceKind: "target_role_fit",
+          sourceLabel: "Role-fit framing",
+          revisionRound: 0
+        },
+        {
+          id: "ai-3",
+          section: "工作经历",
+          title: "工作改写",
+          beforeText: "B 端客户服务",
+          afterText: "面向 B 端客户进行产品讲解与方案推介，处理客户异议并维护服务体验。",
+          reasonText: "匹配客户成功岗位。",
+          status: "accepted",
+          sourceKind: "target_role_fit",
+          sourceLabel: "Role-fit framing",
+          revisionRound: 0
+        }
+      ],
+      factSubmissions: [],
+      masterFactsUsed: []
+    });
+
+    expect(document.header.name).toBe("吴世阳");
+    expect(document.header.title).toBe("AI Prompt 产品专员");
+    expect(JSON.stringify(document.sections.find((section) => section.id === "personal-strengths")?.items)).toContain(
+      "AI 产品与客户反馈理解能力并重"
+    );
+    expect(JSON.stringify(document.sections.find((section) => section.id === "work-experience")?.items)).toContain("广发银行北京分行");
+    expect(JSON.stringify(document.sections.find((section) => section.id === "work-experience")?.items)).toContain("B 端客户");
+    expect(JSON.stringify(document.sections.find((section) => section.id === "project-experience")?.items)).toContain("OfferYou");
+    expect(JSON.stringify(document.sections.find((section) => section.id === "project-experience")?.items)).toContain("Prompt 迭代");
+    expect(document.sections.find((section) => section.id === "education")?.items[0]).toMatchObject({
+      type: "entry",
+      heading: "对外经济贸易大学",
+      meta: "2020-2022"
+    });
   });
 });

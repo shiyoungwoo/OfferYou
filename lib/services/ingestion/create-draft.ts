@@ -45,51 +45,53 @@ export async function createDraft(input: CreateDraftInput): Promise<PersistedWor
 
   const factSeeds = [
     {
-      title: "Resume baseline",
+      title: "简历原文",
       section: "summary",
-      text: resumeExtractedText || "Resume content pending richer extraction.",
+      text: resumeExtractedText || "暂无提取到的简历内容。",
       sourceKind: "resume_baseline" as const,
-      sourceLabel: "Resume baseline"
+      sourceLabel: "简历原文"
     },
     ...masterFacts.map((fact) => ({
       title: fact.title,
       section: fact.blockType,
       text: fact.summary,
       sourceKind: "master_fact" as const,
-      sourceLabel: `Master fact: ${fact.title}`
+      sourceLabel: `默认事实: ${fact.title}`
     })),
     ...(talentProfile
       ? [
           {
-            title: "Confirmed strengths profile",
+            title: "已确认的优势档案",
             section: "summary",
             text: `${talentProfile.profile.headline} ${talentProfile.profile.confidenceNote}`,
             sourceKind: "target_role_fit" as const,
-            sourceLabel: "Talent lens"
+            sourceLabel: "天赋视角"
           }
         ]
       : []),
     ...(selectedCareerDirection
       ? [
           {
-            title: `Career direction: ${selectedCareerDirection.label}`,
+            title: `职业方向: ${selectedCareerDirection.label}`,
             section: "summary",
-            text: `${selectedCareerDirection.rationale} Watch-out: ${selectedCareerDirection.watchOut}`,
+            text: `${selectedCareerDirection.rationale} 注意事项: ${selectedCareerDirection.watchOut}`,
             sourceKind: "target_role_fit" as const,
-            sourceLabel: "Career direction lens"
+            sourceLabel: "职业方向视角"
           }
         ]
       : []),
     {
-      title: "Target role fit",
+      title: "目标岗位契合度",
       section: "project",
-      text: `Applying for ${input.jobTitle} at ${input.company} with an emphasis on truthful role alignment, transferable strengths, and evidence-backed readiness.`,
+      text: `正在申请 ${input.company} 的 ${input.jobTitle} 岗位，重点在于真实的岗位匹配、可迁移优势和有证据支撑的胜任力。`,
       sourceKind: "target_role_fit" as const,
-      sourceLabel: "Role-fit framing"
+      sourceLabel: "岗位适配框架"
     }
   ];
 
   const analysis = await analyzeDraft({
+    company: input.company,
+    jobTitle: input.jobTitle,
     jdText: input.jdContent,
     talentProfile: talentProfile
       ? {

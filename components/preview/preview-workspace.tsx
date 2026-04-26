@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useMemo, useState, useTransition } from "react";
+import React, { useMemo, useState, useTransition, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ExportPdfButton } from "@/components/preview/export-pdf-button";
 import { ResumePreview } from "@/components/preview/resume-preview";
 import { TemplateSwitcher } from "@/components/preview/template-switcher";
-import type { ResumeDocument, ResumeDocumentEntryItem } from "@/lib/document/resume-document";
+import { normalizeResumeTemplateKey, type ResumeDocument, type ResumeDocumentEntryItem } from "@/lib/document/resume-document";
 
 type PreviewWorkspaceProps = {
   draftId: string;
@@ -13,23 +13,84 @@ type PreviewWorkspaceProps = {
 };
 
 export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceProps) {
-  const [document, setDocument] = useState(initialDocument);
-  const [savedDocument, setSavedDocument] = useState(initialDocument);
+  const normalizedInitialDocument = useMemo(
+    () => ({
+      ...initialDocument,
+      templateKey: normalizeResumeTemplateKey(initialDocument.templateKey)
+    }),
+    [initialDocument]
+  );
+  const [document, setDocument] = useState(normalizedInitialDocument);
+  const [savedDocument, setSavedDocument] = useState(normalizedInitialDocument);
   const [isEditing, setIsEditing] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [realPageCount, setRealPageCount] = useState(1);
+  const [squishLevel, setSquishLevel] = useState(0);
+
+  useEffect(() => {
+    const measure = () => {
+      if (contentRef.current) {
+        const height = contentRef.current.scrollHeight;
+        const count = Math.ceil(height / 1123);
+        setRealPageCount(count);
+
+        // Squish level calculation
+        if (height <= 1123) {
+          setSquishLevel(0);
+        } else if (height <= 1250) {
+          setSquishLevel(1);
+        } else {
+          setSquishLevel(2);
+        }
+      }
+    };
+
+    if (typeof ResizeObserver === "undefined") {
+      measure();
+      return;
+    }
+
+    const observer = new ResizeObserver(measure);
+    if (contentRef.current) observer.observe(contentRef.current);
+    measure();
+    return () => observer.disconnect();
+  }, [document]);
+
   const dirty = useMemo(() => JSON.stringify(document) !== JSON.stringify(savedDocument), [document, savedDocument]);
+  const currentTemplate = normalizeResumeTemplateKey(document.templateKey);
+  const personalInfoValue = useMemo(() => getPersonalInfoValue(document), [document]);
 
   function updateHeader(field: "name" | "title", value: string) {
     setDocument((c) => ({ ...c, header: { ...c.header, [field]: value } }));
   }
 
-  function updateContacts(value: string) {
-    setDocument((c) => ({
-      ...c,
-      header: { ...c.header, contacts: value.split("\n").map((s) => s.trim()).filter(Boolean) }
-    }));
+  function updateTemplateKey(templateKey: ResumeDocument["templateKey"]) {
+    setDocument((c) => ({ ...c, templateKey }));
+  }
+
+  function updatePersonalInfo(value: string) {
+    const lines = splitLines(value);
+    setDocument((c) => {
+      const personalInfoSection = {
+        id: "personal-info",
+        title: "个人信息",
+        tone: "hero" as const,
+        items: lines.map((text) => ({ type: "text" as const, text }))
+      };
+      const hasPersonalInfo = c.sections.some((section) => section.id === "personal-info");
+      const sections = hasPersonalInfo
+        ? c.sections.map((section) => (section.id === "personal-info" ? personalInfoSection : section))
+        : [personalInfoSection, ...c.sections];
+
+      return {
+        ...c,
+        header: { ...c.header, contacts: lines },
+        sections
+      };
+    });
   }
 
   function updateTextItem(si: number, ii: number, value: string) {
@@ -112,16 +173,17 @@ export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceP
       <nav className="flex w-[794px] items-center gap-px rounded-full border border-line bg-white/90 p-1 shadow-card">
         {/* Left: template + edit */}
         <div className="flex items-center gap-1 pl-2">
-          <TemplateSwitcher currentTemplate={document.templateKey ?? "template_a"} />
+          <TemplateSwitcher currentTemplate={currentTemplate} onChange={updateTemplateKey} />
           <span className="mx-1 h-4 w-px bg-slate-200" />
           <button
             className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
               isEditing ? "bg-slate-800 text-white" : "text-slate-600 hover:bg-slate-100"
             }`}
+            aria-label={isEditing ? "收起预览编辑器" : "编辑当前预览"}
             onClick={() => setIsEditing((v) => !v)}
             type="button"
           >
-            {isEditing ? "收起编辑" : "编辑"}
+            {isEditing ? "收起编辑" : "编辑当前预览"}
           </button>
         </div>
 
@@ -130,6 +192,15 @@ export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceP
 
         {/* Right: return + export */}
         <div className="flex items-center gap-1 pr-1">
+          <span className={`rounded-full border px-3 py-1.5 text-[10px] font-medium tracking-wider transition ${
+            realPageCount <= 1
+              ? (squishLevel === 0 ? "border-emerald-100 bg-emerald-50/50 text-emerald-700" : "border-blue-100 bg-blue-50/50 text-blue-700")
+              : "border-rose-100 bg-rose-50/50 text-rose-700"
+          }`}>
+            {realPageCount <= 1
+              ? (squishLevel === 0 ? "1 页 A4 (适合投递)" : "1 页 A4 (已自动压缩排版)")
+              : `超出一页 (${realPageCount} 页)，建议裁剪`}
+          </span>
           <Link
             className="rounded-full px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
             href={`/applications/${draftId}`}
@@ -143,7 +214,7 @@ export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceP
       {/* ─── Collapsible edit panel ─── */}
       {isEditing ? (
         <section className="w-[794px] rounded-2xl border border-line bg-white/90 p-5 shadow-card">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2">
             <label className="grid gap-1 text-sm font-medium text-slate-700">
               姓名
               <input className="rounded-lg border border-line px-3 py-1.5 text-sm" onChange={(e) => updateHeader("name", e.target.value)} value={document.header.name} />
@@ -152,19 +223,42 @@ export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceP
               目标岗位
               <input className="rounded-lg border border-line px-3 py-1.5 text-sm" onChange={(e) => updateHeader("title", e.target.value)} value={document.header.title} />
             </label>
-            <label className="grid gap-1 text-sm font-medium text-slate-700">
-              联系方式
-              <textarea className="min-h-12 rounded-lg border border-line px-3 py-1.5 text-sm" onChange={(e) => updateContacts(e.target.value)} value={(document.header.contacts ?? []).join("\n")} />
-            </label>
           </div>
 
-          {document.sections.map((section, si) => (
+          <label className="mt-3 grid gap-1 text-sm font-medium text-slate-700">
+            个人信息
+            <textarea
+              className="min-h-20 rounded-lg border border-line px-3 py-2 text-sm"
+              onChange={(e) => updatePersonalInfo(e.target.value)}
+              placeholder="手机：138 0000 0000&#10;邮箱：name@example.com&#10;居住地：深圳&#10;GitHub：github.com/example"
+              value={personalInfoValue}
+            />
+          </label>
+
+          {document.sections
+            .map((section, si) => ({ section, si }))
+            .filter(({ section }) => section.id !== "personal-info")
+            .map(({ section, si }) => (
             <div key={section.id} className="mt-3 rounded-xl border border-line bg-paper p-3">
               <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 {section.title}
                 <div className="flex gap-1">
-                  <button className="rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-slate-600" onClick={() => addTextItem(si)} type="button">+ 文本</button>
-                  <button className="rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-slate-600" onClick={() => addEntryItem(si)} type="button">+ 条目</button>
+                  <button
+                    aria-label="新增文本"
+                    className="rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-slate-600"
+                    onClick={() => addTextItem(si)}
+                    type="button"
+                  >
+                    + 文本
+                  </button>
+                  <button
+                    aria-label="新增条目"
+                    className="rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-slate-600"
+                    onClick={() => addEntryItem(si)}
+                    type="button"
+                  >
+                    + 条目
+                  </button>
                 </div>
               </div>
               <div className="mt-2 space-y-2">
@@ -172,7 +266,14 @@ export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceP
                   item.type === "text" ? (
                     <div key={`${section.id}-${ii}`} className="flex gap-1 items-start">
                       <textarea className="min-h-12 flex-1 rounded-lg border border-line px-2 py-1.5 text-sm" onChange={(e) => updateTextItem(si, ii, e.target.value)} value={item.text} />
-                      <button className="rounded-full border border-rose-200 px-1.5 py-0.5 text-xs text-rose-500" onClick={() => removeItem(si, ii)} type="button">×</button>
+                      <button
+                        aria-label="删除这条"
+                        className="rounded-full border border-rose-200 px-1.5 py-0.5 text-xs text-rose-500"
+                        onClick={() => removeItem(si, ii)}
+                        type="button"
+                      >
+                        ×
+                      </button>
                     </div>
                   ) : (
                     <div key={`${section.id}-${ii}`} className="grid gap-1 rounded-lg border border-line bg-white p-2">
@@ -183,7 +284,14 @@ export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceP
                       </div>
                       <textarea className="min-h-10 rounded border border-line px-2 py-1 text-sm" onChange={(e) => updateEntryItem(si, ii, "summary", e.target.value)} placeholder="摘要" value={item.summary ?? ""} />
                       <textarea className="min-h-12 rounded border border-line px-2 py-1 text-sm" onChange={(e) => updateEntryItem(si, ii, "bullets", e.target.value)} placeholder="每行一条" value={(item.bullets ?? []).join("\n")} />
-                      <button className="justify-self-end rounded-full border border-rose-200 px-2 py-0.5 text-xs text-rose-500" onClick={() => removeItem(si, ii)} type="button">删除</button>
+                      <button
+                        aria-label="删除这条"
+                        className="justify-self-end rounded-full border border-rose-200 px-2 py-0.5 text-xs text-rose-500"
+                        onClick={() => removeItem(si, ii)}
+                        type="button"
+                      >
+                        删除
+                      </button>
                     </div>
                   )
                 )}
@@ -201,7 +309,26 @@ export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceP
       ) : null}
 
       {/* ─── Resume preview (main content, full width) ─── */}
-      <ResumePreview document={document} />
+      <div ref={contentRef} className="print:contents">
+        <ResumePreview document={document} squishLevel={squishLevel} />
+      </div>
     </div>
   );
+}
+
+function getPersonalInfoValue(document: ResumeDocument) {
+  const personalInfo = document.sections.find((section) => section.id === "personal-info");
+  const sectionLines =
+    personalInfo?.items
+      .map((item) => (item.type === "text" ? item.text : [item.heading, item.subheading].filter(Boolean).join("：")))
+      .filter(Boolean) ?? [];
+
+  return (sectionLines.length > 0 ? sectionLines : document.header.contacts ?? []).join("\n");
+}
+
+function splitLines(value: string) {
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 }

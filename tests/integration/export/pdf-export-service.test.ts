@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { renderPdfFromHtml } from "@/lib/services/export/pdf-export-service";
+import { buildResumePdfFilename } from "@/lib/services/export/preview-renderer";
 
 let tempDir: string;
 let previousCwd: string;
@@ -23,13 +24,25 @@ describe("renderPdfFromHtml", () => {
     const result = await renderPdfFromHtml({
       userId: "default-user",
       draftId: "draft-1",
-      html: "<html><body><main>Resume</main></body></html>"
+      html: "<html><body><main>Resume</main></body></html>",
+      filename: buildResumePdfFilename({
+        templateKey: "professional-cn",
+        header: {
+          name: "王小明",
+          title: "AI 产品经理",
+          meta: []
+        },
+        sections: []
+      })
     });
 
     const pdf = await readFile(result.storagePath);
+    const basename = path.basename(result.storagePath);
 
     expect(result.assetType).toBe("export_pdf");
+    expect(result.pageCount).toBeGreaterThanOrEqual(1);
     expect(result.storagePath.endsWith(".pdf")).toBe(true);
+    expect(basename).toMatch(/^[0-9a-f-]+-王小明-AI 产品经理-可投递版-\d{8}\.pdf$/u);
     expect(pdf.byteLength).toBeGreaterThan(100);
-  });
+  }, 20_000);
 });

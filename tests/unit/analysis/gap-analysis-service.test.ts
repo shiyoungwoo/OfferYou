@@ -13,6 +13,7 @@ describe("analyzeDraft", () => {
     expect(result.gaps.length).toBeGreaterThan(0);
     expect(result.suggestions.length).toBeGreaterThan(0);
     expect(result.optimizationMode).toBe("baseline_jd_match");
+    expect(result.riskNotes.join(" ")).toContain("模型降级原因");
   });
 
   it("switches into talent-amplified optimization when a strengths profile exists", async () => {
@@ -28,14 +29,14 @@ describe("analyzeDraft", () => {
       },
       facts: [
         {
-          text: "Guided customers through a messy onboarding flow and rebuilt trust across teams.",
-          sourceKind: "resume_baseline"
+          text: "Guided customers through a messy onboarding flow and rebuilt trust across teams."
         }
       ]
     });
 
     expect(result.optimizationMode).toBe("talent_amplified");
-    expect(result.strengths.join(" ")).toMatch(/confirmed strengths profile/i);
-    expect(result.suggestions[0]?.afterText).toMatch(/underlying strengths profile/i);
+    expect(result.strengths.join(" ")).toContain("已确认的优势档案");
+    expect(result.strengths.join(" ")).toContain("客户成功、客户关系与服务推进类方向");
+    expect(result.suggestions[0]?.afterText).toContain("工作流设计");
   });
 });

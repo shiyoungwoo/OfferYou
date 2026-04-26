@@ -14,7 +14,7 @@ describe("SuggestionList", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders rewrite suggestions without source-management controls", () => {
+  it("renders rewrite suggestions with expandable cards and Chinese controls", () => {
     render(
       <SuggestionList
         draftId="draft-1"
@@ -48,10 +48,11 @@ describe("SuggestionList", () => {
     );
 
     expect(screen.getAllByText(/Master-derived rewrite|Resume baseline rewrite/).length).toBeGreaterThan(0);
-    expect(screen.getByText("突出你的天然优势")).toBeTruthy();
     expect(screen.getByText("保留事实，增强说服力")).toBeTruthy();
+    expect(screen.getByText("突出天然优势")).toBeTruthy();
+    expect(screen.getAllByText("展开详情").length).toBeGreaterThan(0);
     expect(screen.getAllByText("建议改成").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("待处理").length).toBeGreaterThan(0);
     expect(screen.queryByText("Master fact: Workflow instrumentation rollout")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Master Facts" })).toBeNull();
   });
 });

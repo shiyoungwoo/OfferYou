@@ -33,8 +33,14 @@ export type ResumeDocumentSection = {
   tone?: "hero" | "standard" | "muted";
 };
 
+export type ResumeTemplateKey = "professional-cn" | "ats-clean" | "template_a" | "template_b";
+
 export type ResumeDocument = {
-  templateKey: string;
+  templateKey: ResumeTemplateKey;
   header: ResumeDocumentHeader;
   sections: ResumeDocumentSection[];
 };
+
+export function normalizeResumeTemplateKey(templateKey?: string): ResumeTemplateKey {
+  return templateKey === "ats-clean" ? "ats-clean" : "professional-cn";
+}
