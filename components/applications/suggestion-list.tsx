@@ -22,6 +22,8 @@ type DatedSuggestionEntry = {
   body: string;
 };
 
+type PartDecision = "accepted" | "rejected";
+
 export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
   const router = useRouter();
   const [draftSuggestions, setDraftSuggestions] = useState<EditableSuggestion[]>(() =>
@@ -29,7 +31,7 @@ export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
   );
   const [expandedId, setExpandedId] = useState<string | null>(suggestions[0]?.id ?? null);
   const [openRevisionId, setOpenRevisionId] = useState<string | null>(null);
-  const [decidedParts, setDecidedParts] = useState<Record<string, Set<number>>>({});
+  const [decidedParts, setDecidedParts] = useState<Record<string, Record<number, PartDecision>>>({});
 
   useEffect(() => {
     setDraftSuggestions(createEditableSuggestions(suggestions));
@@ -136,7 +138,7 @@ export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
                       {(() => {
                         const text = suggestion.beforeText;
                         const revisedText = suggestion.editedAfterText;
-                        const decisions = decidedParts[suggestion.id] || new Set<number>();
+                        const decisions = decidedParts[suggestion.id] || {};
                         
                         const beforeEntries = splitDatedSuggestionEntries(text);
                         const afterEntries = splitDatedSuggestionEntries(revisedText);
@@ -151,10 +153,7 @@ export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
                                   // Find the best matching revised entry by title overlap
                                   let revisedEntry = afterEntries[idx];
                                   if (afterEntries.length > 0) {
-                                    const bestMatch = afterEntries.find(ae => {
-                                      const aeWords = ae.title.split(/[\s|｜·]+/);
-                                      return aeWords.some(w => w.length >= 2 && entry.title.includes(w));
-                                    });
+                                    const bestMatch = findBestRevisedEntry(entry, afterEntries);
                                     if (bestMatch) revisedEntry = bestMatch;
                                   }
 
@@ -165,8 +164,11 @@ export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
                                       key={`${suggestion.id}-${idx}`}
                                       draftId={draftId}
                                       suggestionId={suggestion.id}
-                                      currentStatus={suggestion.status}
-                                      isDecided={decisions.has(idx)}
+                                      currentStatus={decisions[idx] ?? "pending"}
+                                      isDecided={Boolean(decisions[idx])}
+                                      localOnly
+                                      actionAfterText={revisedEntry.body || `${revisedEntry.title} ${revisedEntry.date}`.trim()}
+                                      actionReasonText={idx === 0 ? suggestion.editedReasonText : ""}
                                       title={`${entry.title} ${entry.date}`.trim()} 
                                       original={entry.body} 
                                       revised={revisedEntry.body || (revisedEntry ? `${revisedEntry.title} ${revisedEntry.date}`.trim() : "")} 
@@ -180,13 +182,31 @@ export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
                                       }}
                                       onDecision={(decision) => {
                                         setDecidedParts(prev => {
-                                          const next = { ...prev };
-                                          const set = new Set(next[suggestion.id] || []);
-                                          set.add(idx);
-                                          next[suggestion.id] = set;
-                                          return next;
+                                          const nextDecisions = {
+                                            ...(prev[suggestion.id] || {}),
+                                            [idx]: decision
+                                          };
+
+                                          if (Object.keys(nextDecisions).length >= beforeEntries.length) {
+                                            void syncGroupedSuggestionDecision({
+                                              draftId,
+                                              suggestionId: suggestion.id,
+                                              decisions: nextDecisions,
+                                              beforeEntries,
+                                              afterEntries,
+                                              reasonText: suggestion.editedReasonText,
+                                              onSynced: async () => {
+                                                setExpandedId(null);
+                                                await router.refresh();
+                                              }
+                                            });
+                                          }
+
+                                          return {
+                                            ...prev,
+                                            [suggestion.id]: nextDecisions
+                                          };
                                         });
-                                        setExpandedId(null);
                                       }}
                                       onUpdateRevised={(newBody) => {
                                         setDraftSuggestions(current => current.map(s => {
@@ -214,6 +234,8 @@ export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
                             suggestionId={suggestion.id}
                             currentStatus={suggestion.status}
                             isDecided={suggestion.status !== "pending"}
+                            actionAfterText={suggestion.editedAfterText}
+                            actionReasonText={suggestion.editedReasonText}
                             title={suggestion.title} 
                             original={suggestion.beforeText} 
                             revised={suggestion.editedAfterText} 
@@ -273,7 +295,10 @@ function TSection({
   onRevise,
   onUpdateRevised,
   onDecision,
-  isDecided
+  isDecided,
+  actionAfterText,
+  actionReasonText,
+  localOnly = false
 }: { 
   title: string; 
   original: string; 
@@ -288,6 +313,9 @@ function TSection({
   onUpdateRevised?: (text: string) => void;
   onDecision?: (decision: "accepted" | "rejected") => void;
   isDecided?: boolean;
+  actionAfterText?: string;
+  actionReasonText?: string;
+  localOnly?: boolean;
 }) {
   const [localIsEditing, setLocalIsEditing] = React.useState(false);
   const [localRevised, setLocalRevised] = React.useState(revised);
@@ -298,6 +326,10 @@ function TSection({
   React.useEffect(() => {
     setLocalRevised(revised);
   }, [revised]);
+
+  React.useEffect(() => {
+    setLocalStatus(isDecided ? (currentStatus as "accepted" | "rejected") : "pending");
+  }, [currentStatus, isDecided]);
   const { baseReason, gapReminders, qualityNotes } = parseExtendedReasonText(reason);
   const tags = reason.match(/；标签：([^；\n]+)/)?.[1]?.split("、") || [];
   if (tags.length === 0 && baseReason.includes("「")) {
@@ -318,6 +350,11 @@ function TSection({
               draftId={draftId}
               suggestionId={suggestionId}
               currentStatus={localStatus}
+              actionPayload={{
+                afterText: actionAfterText ?? localRevised,
+                reasonText: actionReasonText ?? reason
+              }}
+              localOnly={localOnly}
               onActionComplete={async () => {
                 await onActionComplete();
               }}
@@ -470,6 +507,76 @@ function splitDatedSuggestionEntries(text: string): DatedSuggestionEntry[] {
   }
 
   return entries;
+}
+
+function findBestRevisedEntry(entry: DatedSuggestionEntry, candidates: DatedSuggestionEntry[]) {
+  const sourceTokens = tokenizeEntryTitle(entry.title);
+  let best: { entry: DatedSuggestionEntry; score: number } | null = null;
+
+  for (const candidate of candidates) {
+    const candidateTokens = tokenizeEntryTitle(candidate.title);
+    const overlap = candidateTokens.filter((token) => sourceTokens.includes(token)).length;
+    const directHit = entry.title.includes(candidate.title) || candidate.title.includes(entry.title);
+    const score = overlap + (directHit ? 3 : 0);
+
+    if (score > (best?.score ?? 0)) {
+      best = { entry: candidate, score };
+    }
+  }
+
+  return best && best.score >= 2 ? best.entry : null;
+}
+
+function tokenizeEntryTitle(title: string) {
+  const commonTokens = new Set(["ai", "项目", "个人", "工作", "内容", "运营"]);
+  return title
+    .toLowerCase()
+    .split(/[\s|｜·（）()_-]+/u)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2 && !commonTokens.has(token));
+}
+
+async function syncGroupedSuggestionDecision({
+  draftId,
+  suggestionId,
+  decisions,
+  beforeEntries,
+  afterEntries,
+  reasonText,
+  onSynced
+}: {
+  draftId: string;
+  suggestionId: string;
+  decisions: Record<number, PartDecision>;
+  beforeEntries: DatedSuggestionEntry[];
+  afterEntries: DatedSuggestionEntry[];
+  reasonText: string;
+  onSynced: () => Promise<void>;
+}) {
+  const acceptedCount = Object.values(decisions).filter((decision) => decision === "accepted").length;
+  const action = acceptedCount > 0 ? "accept" : "reject";
+  const afterText = beforeEntries
+    .map((entry, index) => {
+      const chosen = decisions[index] === "accepted" ? (afterEntries[index] ?? entry) : entry;
+      return `${chosen.title} ${chosen.date}\n${chosen.body}`.trim();
+    })
+    .join("\n\n");
+
+  const response = await fetch(`/api/drafts/${draftId}/suggestions/${suggestionId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      action,
+      afterText,
+      reasonText
+    })
+  });
+
+  if (response.ok) {
+    await onSynced();
+  }
 }
 
 function SuggestionBlock({ label, text, accent = false }: { label: string; text: string; accent?: boolean }) {

@@ -1,8 +1,14 @@
 // Quick Gemini API test — run with: node scripts/test-gemini.mjs
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const apiKey = process.env.GEMINI_API_KEY || "AIzaSyCh4mBai_pkH8pLttg5b_9pyDJtQBGKiD4";
-console.log("Using API Key:", apiKey.slice(0, 12) + "...");
+const apiKey = process.env.GEMINI_API_KEY;
+
+if (!apiKey) {
+  console.error("Missing GEMINI_API_KEY. Set it in the local shell or .env.local before running this script.");
+  process.exit(1);
+}
+
+console.log("Using API Key:", `${apiKey.slice(0, 6)}...`);
 
 const genAI = new GoogleGenerativeAI(apiKey);
 const model = genAI.getGenerativeModel({

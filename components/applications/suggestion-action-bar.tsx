@@ -11,6 +11,11 @@ type SuggestionActionBarProps = {
   onActionComplete: () => Promise<void> | void;
   onAccept?: () => void;
   onReject?: () => void;
+  actionPayload?: {
+    afterText?: string;
+    reasonText?: string;
+  };
+  localOnly?: boolean;
   compact?: boolean;
 };
 
@@ -23,6 +28,8 @@ export function SuggestionActionBar({
   onActionComplete,
   onAccept,
   onReject,
+  actionPayload,
+  localOnly = false,
   compact = false
 }: SuggestionActionBarProps) {
   const [isPending, startTransition] = useTransition();
@@ -30,12 +37,22 @@ export function SuggestionActionBar({
   function runSimpleAction(action: "accept" | "reject", e: React.MouseEvent) {
     e.stopPropagation();
     startTransition(async () => {
+      if (localOnly) {
+        if (action === "accept") {
+          onAccept?.();
+        } else {
+          onReject?.();
+        }
+        await onActionComplete();
+        return;
+      }
+
       const response = await fetch(`/api/drafts/${draftId}/suggestions/${suggestionId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action, ...actionPayload })
       });
 
       if (!response.ok) {

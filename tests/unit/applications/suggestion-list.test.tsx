@@ -87,7 +87,7 @@ describe("SuggestionList", () => {
     expect(screen.getByText(/围绕 AI 产品经理岗位/u)).toBeTruthy();
   });
 
-  it("auto-collapses details after accepting a split suggestion", async () => {
+  it("auto-collapses details after every part in a split suggestion is decided", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -129,6 +129,10 @@ describe("SuggestionList", () => {
     expect(screen.getByText("收起详情")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "接受" })[0]);
+
+    expect(screen.getByText("收起详情")).toBeTruthy();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "接受" })[1]);
 
     await waitFor(() => {
       expect(screen.getByText("展开详情")).toBeTruthy();

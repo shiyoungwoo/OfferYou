@@ -59,6 +59,8 @@ export type PersistedWorkspaceDraft = {
     revisionRound: number;
     userFeedbackType?: string;
     userFeedbackText?: string;
+    acceptedAfterText?: string;
+    acceptedReasonText?: string;
   }>;
   factSubmissions: Array<{
     id: string;

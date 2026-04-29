@@ -12,13 +12,16 @@ export function TemplateProfessionalCN({ document }: TemplateProfessionalCNProps
 
   return (
     <div className="w-full text-[#1F2430] antialiased" style={{ fontFamily: '"Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif' }}>
-      <header className="resume-header flex flex-col items-center gap-2 pb-4 pt-2">
-        <h2 className="text-[25pt] font-extrabold leading-none tracking-[0.05em] text-[#1F2430]">
-          {document.header.name}
-        </h2>
+      <header className="resume-header border-b-2 border-[#1F2430] pb-2">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="text-[20.5pt] font-extrabold leading-none tracking-[0.02em] text-[#1F2430]">
+            {document.header.name}
+          </h2>
+          <span className="text-[11pt] font-medium text-[#1F2430]">{document.header.title}</span>
+        </div>
 
         {headerInfo.length > 0 && (
-          <div className="contact-line mt-1.5 flex flex-wrap justify-center items-center gap-x-2.5 gap-y-0.5 text-[9.5pt] font-medium text-[#5B6472]">
+          <div className="contact-line mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[9pt] font-medium text-[#5B6472]">
             {headerInfo.map((item, i) => (
               <span key={i} className="inline-flex items-center whitespace-nowrap">
                 {item}
@@ -29,10 +32,6 @@ export function TemplateProfessionalCN({ document }: TemplateProfessionalCNProps
             ))}
           </div>
         )}
-
-        <div className="mt-1 text-[13.5pt] font-bold text-[#2F5ED7] border-b-2 border-[#2F5ED7] px-8 pb-0.5">
-          求职意向：{document.header.title}
-        </div>
       </header>
 
       <div className="mt-3.5 flex flex-col gap-0">

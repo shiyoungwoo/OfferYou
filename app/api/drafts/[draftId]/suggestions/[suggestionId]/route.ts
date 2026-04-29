@@ -13,6 +13,8 @@ export async function POST(
   const { draftId, suggestionId } = await context.params;
   const payload = (await request.json()) as {
     action: "accept" | "reject" | "revise";
+    afterText?: string;
+    reasonText?: string;
     feedbackType?: "too_generic" | "too_aggressive" | "not_my_style" | "fact_inaccurate" | "wrong_focus" | "adding_new_fact" | "custom";
     feedbackText?: string;
   };
@@ -22,6 +24,8 @@ export async function POST(
       draftId,
       suggestionId,
       action: payload.action,
+      afterText: payload.afterText,
+      reasonText: payload.reasonText,
       feedbackType: payload.feedbackType,
       feedbackText: payload.feedbackText
     });

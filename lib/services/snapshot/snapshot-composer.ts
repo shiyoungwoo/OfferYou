@@ -63,6 +63,46 @@ export async function composeSnapshotDocument(draft: PersistedWorkspaceDraft): P
       ? "当前简历结构仍有低置信字段，建议确认后再投递。"
       : "";
 
+  const sections: ResumeDocument["sections"] = [
+    {
+      id: "personal-info",
+      title: "个人信息",
+      tone: "hero",
+      items: buildPersonalInfoItems(targetTitle, resumeSignals, resumeSections)
+    },
+    {
+      id: "personal-strengths",
+      title: "个人优势",
+      tone: "standard",
+      items: buildStrengthItems(draft, resumeSections, selectedSuggestions)
+    },
+    {
+      id: "work-experience",
+      title: "工作经历",
+      items: buildWorkExperienceItems(draft, roleContext, resumeSections, selectedSuggestions)
+    },
+    {
+      id: "project-experience",
+      title: "项目经历",
+      items: buildProjectItems(draft, roleContext, resumeSections, selectedSuggestions)
+    },
+    {
+      id: "education",
+      title: "教育背景",
+      tone: "muted",
+      items: buildEducationItems(draft, resumeSections, selectedSuggestions)
+    }
+  ];
+  const supplementItems = buildSupplementItems(draft, resumeSections, selectedSuggestions);
+  if (supplementItems.length > 0) {
+    sections.push({
+      id: "supplement",
+      title: "补充信息",
+      tone: "muted",
+      items: supplementItems
+    });
+  }
+
   return {
     templateKey: "professional-cn",
     header: {
@@ -71,36 +111,7 @@ export async function composeSnapshotDocument(draft: PersistedWorkspaceDraft): P
       meta: calibrationWarning ? [calibrationWarning] : [],
       contacts: resumeSignals.contacts
     },
-    sections: [
-      {
-        id: "personal-info",
-        title: "个人信息",
-        tone: "hero",
-        items: buildPersonalInfoItems(targetTitle, resumeSignals, resumeSections)
-      },
-      {
-        id: "personal-strengths",
-        title: "个人优势",
-        tone: "standard",
-        items: buildStrengthItems(draft, resumeSections, selectedSuggestions)
-      },
-      {
-        id: "work-experience",
-        title: "工作经历",
-        items: buildWorkExperienceItems(draft, roleContext, resumeSections, selectedSuggestions)
-      },
-      {
-        id: "project-experience",
-        title: "项目经历",
-        items: buildProjectItems(draft, roleContext, resumeSections, selectedSuggestions)
-      },
-      {
-        id: "education",
-        title: "教育背景",
-        tone: "muted",
-        items: buildEducationItems(draft, resumeSections, selectedSuggestions)
-      }
-    ]
+    sections
   };
 }
 
@@ -281,26 +292,10 @@ function formatEducationSummary(entry?: ParsedResumeEntry) {
 function buildEducationItems(
   draft: PersistedWorkspaceDraft,
   resumeSections: ReturnType<typeof extractResumeSections>,
-  suggestions: PersistedWorkspaceDraft["suggestions"] = []
+  _suggestions: PersistedWorkspaceDraft["suggestions"] = []
 ) {
   const rawEducationEntries = draft.calibratedResume ? [] : extractRawSectionEntries(draft.resumeExtractedText ?? "", "education");
   const items = dedupeEntries([
-    ...suggestions
-      .filter((suggestion) => isSuggestionForSection(suggestion, ["education"]))
-      .flatMap((suggestion) => {
-        // Handle multi-school lines in suggestions
-        const lines = suggestion.afterText.split(/\r?\n/);
-        const allEntries: ParsedResumeEntry[] = [];
-        for (const line of lines) {
-          const split = splitEducationLine(line); // I'll make this helper accessible
-          if (split.length > 1) {
-             allEntries.push(...split.map(s => formatEducationLine(s)));
-          } else {
-             allEntries.push(createSuggestionEntry({ ...suggestion, afterText: line }));
-          }
-        }
-        return allEntries;
-      }),
     ...rawEducationEntries,
     ...resumeSections.education,
     ...(draft.masterFactsUsed ?? [])
@@ -317,6 +312,24 @@ function buildEducationItems(
   }
 
   return toTextItems(["请补充教育背景、专业、毕业时间或代表性课程。"]);
+}
+
+function buildSupplementItems(
+  draft: PersistedWorkspaceDraft,
+  resumeSections: ReturnType<typeof extractResumeSections>,
+  suggestions: PersistedWorkspaceDraft["suggestions"] = []
+) {
+  const acceptedSupplement = suggestions
+    .filter((suggestion) => isSuggestionForSection(suggestion, ["supplement"]))
+    .map((suggestion) => cleanGeneratedResumeText(suggestion.afterText));
+  const skillFacts = (draft.masterFactsUsed ?? [])
+    .filter((fact) => fact.blockType === "skill" || fact.blockType === "certificate")
+    .map((fact) => `${fact.title}：${fact.summary}`);
+  const importantLines = dedupeItems([...acceptedSupplement, ...resumeSections.skills, ...skillFacts])
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => /(英语|CET|六级|四级|雅思|托福|证书|PMP|CFA)/iu.test(line));
+
+  return toTextItems(importantLines.slice(0, 1));
 }
 
 function buildResumeDataFromCalibratedResume(calibratedResume: CalibratedResumeProfile): {
@@ -339,7 +352,11 @@ function buildResumeDataFromCalibratedResume(calibratedResume: CalibratedResumeP
     projects: calibratedResume.entries
       .filter((entry) => entry.section === "project")
       .map((entry) => mapCalibratedEntryToParsedResumeEntry(entry, "project")),
-    skills: [] as string[]
+    skills: calibratedResume.entries
+      .filter((entry) => entry.section === "supplement")
+      .flatMap((entry) => [entry.title, ...(entry.bullets ?? [])])
+      .map((line) => cleanResumeLine(line))
+      .filter(Boolean)
   };
 
   const personal = calibratedResume.personalInfo;
@@ -1278,6 +1295,10 @@ function normalizeSuggestionSection(section: string) {
 
   if (["education", "edu", "教育经历", "教育背景", "学历背景", "学习经历"].includes(normalized)) {
     return "education";
+  }
+
+  if (["supplement", "skills", "skill", "certificate", "补充信息", "技能", "技能与证书", "证书"].includes(normalized)) {
+    return "supplement";
   }
 
   return section;

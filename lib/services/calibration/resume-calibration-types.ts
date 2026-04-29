@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ModelProviderKey } from "@/lib/ai/model-provider-config";
 
-export const resumeEntrySectionSchema = z.enum(["summary", "work", "project", "education", "other"]);
+export const resumeEntrySectionSchema = z.enum(["summary", "work", "project", "education", "supplement", "other"]);
 export const resumeCalibrationStatusSchema = z.enum(["pending", "needs_review", "confirmed"]);
 export const resumeFieldConfidenceSchema = z.enum(["high", "medium", "low"]);
 

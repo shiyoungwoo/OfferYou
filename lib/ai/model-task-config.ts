@@ -12,27 +12,27 @@ const TASK_CONFIGS: Record<ModelTaskKey, ModelTaskConfig> = {
   gap_analysis: {
     task: "gap_analysis",
     label: "Gap Analysis",
-    defaultProvider: "gemini"
+    defaultProvider: "openai_compatible"
   },
   rewrite: {
     task: "rewrite",
     label: "Rewrite",
-    defaultProvider: "gemini"
+    defaultProvider: "openai_compatible"
   },
   talent: {
     task: "talent",
     label: "Talent Discovery",
-    defaultProvider: "gemini"
+    defaultProvider: "openai_compatible"
   },
   interview: {
     task: "interview",
     label: "Interview Prep",
-    defaultProvider: "gemini"
+    defaultProvider: "openai_compatible"
   },
   self_intro: {
     task: "self_intro",
     label: "Self Intro",
-    defaultProvider: "gemini"
+    defaultProvider: "openai_compatible"
   },
   resume_calibration: {
     task: "resume_calibration",

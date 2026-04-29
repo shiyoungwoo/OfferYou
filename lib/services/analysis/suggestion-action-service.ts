@@ -9,6 +9,8 @@ export type SuggestionActionInput = {
   draftId: string;
   suggestionId: string;
   action: "accept" | "reject" | "revise";
+  afterText?: string;
+  reasonText?: string;
   feedbackType?: "too_generic" | "too_aggressive" | "not_my_style" | "fact_inaccurate" | "wrong_focus" | "adding_new_fact" | "custom";
   feedbackText?: string;
 };
@@ -28,6 +30,14 @@ export async function applySuggestionAction(input: SuggestionActionInput) {
 
   if (input.action === "accept") {
     suggestion.status = "accepted";
+    if (input.afterText?.trim()) {
+      suggestion.afterText = input.afterText.trim();
+      suggestion.acceptedAfterText = input.afterText.trim();
+    }
+    if (input.reasonText?.trim()) {
+      suggestion.reasonText = input.reasonText.trim();
+      suggestion.acceptedReasonText = input.reasonText.trim();
+    }
     await saveWorkspaceDraft(draft);
 
     try {

@@ -139,11 +139,12 @@ function detectSectionHeading(line: string): ResumeEntrySection | null {
   if (/^(工作经历|工作经验|职业经历|任职经历|实习经历)$/u.test(compact)) return "work";
   if (/^(项目经历|项目经验|个人项目|代表项目)$/u.test(compact)) return "project";
   if (/^(教育背景|教育经历|学历背景|学习经历)$/u.test(compact)) return "education";
+  if (/^(技能与证书|技能证书|专业技能|技能|证书|语言能力|补充信息)$/u.test(compact)) return "supplement";
   return null;
 }
 
 function looksLikeEntryTitle(line: string) {
-  return Boolean(extractDateRange(line)) || /(大学|学院|公司|项目|产品|经理|负责人|实习|本科|硕士|博士)/u.test(line);
+  return Boolean(extractDateRange(line)) || /(大学|学院|公司|项目|产品|经理|负责人|实习|本科|硕士|博士|技能|证书|英语|CET|雅思|托福)/iu.test(line);
 }
 
 function extractDateRange(line: string) {

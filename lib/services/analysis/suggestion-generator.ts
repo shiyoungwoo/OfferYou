@@ -82,7 +82,7 @@ export async function generateAISuggestions(
   input: AIGeneratorInput,
   options: SuggestionGenerationOptions = {}
 ): Promise<SuggestionSeed[]> {
-  const provider = options.modelProvider ?? getDefaultModelProvider();
+  const provider = options.modelProvider ?? getDefaultModelProvider("rewrite");
 
   if (provider === "deterministic_fallback") {
     return generateSeedSuggestions(input);
@@ -220,7 +220,8 @@ function rankSuggestionCandidate(
   const sectionScore =
     fact.section === "project" ? 2 :
     fact.section === "experience" ? 1 :
-    fact.section === "summary" ? 0.5 : 0;
+    fact.section === "summary" ? 0.5 :
+    fact.section === "supplement" ? -1 : 0;
   return {
     fact,
     score: relevance * 10 + sectionScore - index * 0.01
@@ -478,6 +479,7 @@ function buildSuggestionCandidates(input: SuggestionSeedInput): SuggestionCandid
   if (input.calibratedResume?.entries?.length) {
     return input.calibratedResume.entries
       .map((entry) => calibratedEntryToSuggestionCandidate(entry))
+      .filter((fact) => fact.section !== "education")
       .filter((fact) => isSubstantiveFactText(fact.text));
   }
 
@@ -507,6 +509,7 @@ function normalizeCalibratedEntrySection(section: CalibratedResumeProfile["entri
   if (section === "summary") return "summary";
   if (section === "project") return "project";
   if (section === "education") return "education";
+  if (section === "supplement") return "supplement";
   if (section === "work") return "experience";
   return "experience";
 }

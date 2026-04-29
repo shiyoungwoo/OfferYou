@@ -33,6 +33,8 @@ export type WorkspaceSuggestion = {
   parentSuggestionId?: string;
   userFeedbackType?: string;
   userFeedbackText?: string;
+  acceptedAfterText?: string;
+  acceptedReasonText?: string;
 };
 
 export type WorkspaceSnapshotOutline = {

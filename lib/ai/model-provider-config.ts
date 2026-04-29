@@ -28,23 +28,17 @@ export function hasOpenAICompatibleConfig() {
 }
 
 export function getDefaultModelProvider(_task?: ModelTaskKey): ModelProviderKey {
-  if (_task === "resume_calibration") {
-    if (hasOpenAICompatibleConfig()) return "openai_compatible";
-    if (hasGeminiApiKey()) return "gemini";
-    return "deterministic_fallback";
-  }
-
   const envDefault = process.env.DEFAULT_MODEL_PROVIDER as ModelProviderKey;
   if (envDefault === "gemini" && hasGeminiApiKey()) return "gemini";
   if (envDefault === "openai_compatible" && hasOpenAICompatibleConfig()) return "openai_compatible";
   if (envDefault === "deterministic_fallback") return "deterministic_fallback";
 
-  if (hasGeminiApiKey()) {
-    return "gemini";
-  }
-
   if (hasOpenAICompatibleConfig()) {
     return "openai_compatible";
+  }
+
+  if (hasGeminiApiKey()) {
+    return "gemini";
   }
 
   return "deterministic_fallback";
