@@ -1,13 +1,20 @@
-import type { ResumeDocument } from "@/lib/document/resume-document";
+import type { ResumeDocument, ResumeDocumentSection } from "@/lib/document/resume-document";
 
-const MAX_ITEMS_PER_PAGE = 6;
+const MAX_ITEMS_PER_PAGE = 14;
+const PDF_FILENAME_FORBIDDEN_CHARS = /[\/\\:*?"<>|]/g;
 
 export function paginateDocument(document: ResumeDocument): ResumeDocument[] {
+  const sections = getContentSections(getRenderableSections(document.sections));
+
+  if (sections.length === 0) {
+    return [document];
+  }
+
   const pages: ResumeDocument[] = [];
   let currentSections: ResumeDocument["sections"] = [];
   let currentCount = 0;
 
-  for (const section of document.sections) {
+  for (const section of sections) {
     const sectionCount = Math.max(section.items.length, 1);
 
     if (currentSections.length > 0 && currentCount + sectionCount > MAX_ITEMS_PER_PAGE) {
@@ -33,191 +40,265 @@ export function paginateDocument(document: ResumeDocument): ResumeDocument[] {
   return pages.length > 0 ? pages : [document];
 }
 
-export function renderResumeDocumentHtml(document: ResumeDocument) {
-  const pages = paginateDocument(document);
-  const body = pages
-    .map((page, index) => {
-      const sections = page.sections
-        .map(
-          (section) => `
-        <section class="${section.tone ?? "standard"}">
-          <h3>${escapeHtml(section.title)}</h3>
-          <ul>
-            ${section.items
-              .map((item) =>
-                item.type === "entry"
-                  ? `<li class="entry">
-                      <div class="entry-head">
-                        <div>
-                          <p class="entry-title">${escapeHtml(item.heading)}</p>
-                          ${item.subheading ? `<p class="entry-subtitle">${escapeHtml(item.subheading)}</p>` : ""}
-                        </div>
-                        ${item.meta ? `<p class="entry-meta">${escapeHtml(item.meta)}</p>` : ""}
-                      </div>
-                      ${item.summary ? `<p class="entry-summary">${escapeHtml(item.summary)}</p>` : ""}
-                      ${
-                        item.bullets && item.bullets.length > 0
-                          ? `<ul class="entry-bullets">${item.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>`
-                          : ""
-                      }
-                    </li>`
-                  : `<li class="text-item">${escapeHtml(item.text)}</li>`
-              )
-              .join("")}
-          </ul>
-        </section>`
-        )
-        .join("");
+export function estimateResumePageCount(document: ResumeDocument) {
+  return paginateDocument(document).length;
+}
 
-      return `
+export function getResumePageWaterLabel(pageCount: number) {
+  if (pageCount <= 1) {
+    return "一页版，适合投递";
+  }
+
+  if (pageCount === 2) {
+    return "两页版本，建议保留重点";
+  }
+
+  return "建议删减后再导出";
+}
+
+export function buildResumePdfFilename(document: ResumeDocument) {
+  const safeName = sanitizeFilenamePart(document.header.name || "offeryou");
+  const safeTitle = sanitizeFilenamePart(document.header.title || "resume");
+  const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+
+  return `${safeName}-${safeTitle}-可投递版-${dateStamp}.pdf`;
+}
+
+export function renderResumeDocumentHtml(document: ResumeDocument) {
+  const renderableSections = getContentSections(getRenderableSections(document.sections));
+  const headerInfo = getHeaderInfo(document);
+  const sections = renderableSections.map((section) => renderSection(section)).join("");
+
+  const body = `
       <article>
-        <header>
-          <div class="identity">
-            <div>
-              <h2>${escapeHtml(page.header.name)}</h2>
-              <p class="role">${escapeHtml(page.header.title)}</p>
-              ${
-                page.header.contacts && page.header.contacts.length > 0
-                  ? `<p class="contacts">${page.header.contacts.map(escapeHtml).join(" · ")}</p>`
-                  : ""
-              }
-              <p class="meta">${page.header.meta.map(escapeHtml).join(" · ")}</p>
+        <header class="resume-header">
+          <div class="header-copy">
+            <div class="header-main">
+              <h2>${escapeHtml(document.header.name)}</h2>
+              <span class="role">${escapeHtml(document.header.title)}</span>
             </div>
-            <div class="photo">${
-              page.header.photo?.src
-                ? `<img src="${escapeHtml(page.header.photo.src)}" alt="${escapeHtml(page.header.photo.label ?? "照片")}" />`
-                : escapeHtml(page.header.photo?.label ?? "照片")
-            }</div>
+            ${headerInfo.length > 0 ? `<div class="contact-bar">${headerInfo.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
           </div>
         </header>
-        <div class="resume-grid">${sections}</div>
-        <footer>Page ${index + 1}</footer>
+        <div class="resume-sections">${sections}</div>
       </article>`;
-    })
-    .join("");
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(document.header.name)}</title>
     <style>
-      :root { color-scheme: light; }
-      * { box-sizing: border-box; }
+      :root {
+        --main-blue: #2F5ED7;
+        --text-dark: #1F2430;
+        --text-gray: #5B6472;
+        --divider-blue: #D9E2F2;
+        color-scheme: light;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         margin: 0;
-        background: #eff2f5;
-        color: #1f2937;
-        font-family: "IBM Plex Serif", "Source Serif 4", Georgia, serif;
+        background: #f3f6fb;
+        color: var(--text-dark);
+        font-family: "Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        font-size: 10pt;
       }
       .print-shell {
-        display: grid;
-        gap: 24px;
-        padding: 40px 24px;
+        padding: 24px 16px;
       }
       article {
         width: 794px;
+        min-height: 1123px;
         margin: 0 auto;
         background: white;
-        border: 1px solid #d7dde5;
-        border-radius: 8px;
-        padding: 44px 42px;
-        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
-        page-break-after: always;
+        border: 1px solid #dce0e5;
+        border-radius: 6px;
+        padding: 28px 36px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
       }
-      article:last-child { page-break-after: auto; }
-      h2, h3, p, ul { margin: 0; }
-      header { border-bottom: 1px solid #d4d9e1; padding-bottom: 24px; }
-      .identity {
-        display: grid;
-        grid-template-columns: 1fr 102px;
-        gap: 28px;
-        align-items: start;
+
+      /* ── Header ── */
+      .resume-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        padding-bottom: 7px;
+        border-bottom: 2px solid var(--text-dark);
+        margin-bottom: 10px;
       }
-      h2 { font-size: 34px; line-height: 1.1; color: #111827; }
-      h3 { font-size: 13px; letter-spacing: 0.2em; color: #6b7280; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
-      .role { margin-top: 10px; font-size: 15px; letter-spacing: 0.12em; text-transform: uppercase; color: #4b5563; }
-      .contacts { margin-top: 12px; font-size: 13px; color: #374151; }
-      .meta { margin-top: 8px; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b7280; }
-      .photo {
-        width: 102px;
-        height: 118px;
-        border: 1px solid #d1d5db;
-        border-radius: 4px;
+      .header-copy {
+        min-width: 0;
+        flex: 1;
+      }
+      .header-main {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+      }
+      h2 {
+        font-size: 20.5pt;
+        font-weight: 800;
+        line-height: 1.1;
+        color: var(--text-dark);
+        letter-spacing: 0.02em;
+      }
+      .role {
+        font-size: 11pt;
+        font-weight: 500;
+        color: var(--text-dark);
+      }
+      .contact-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0 8px;
+        margin-top: 5px;
+        font-size: 8.8pt;
+        line-height: 1.3;
+        color: var(--text-gray);
+      }
+      .contact-bar span {
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+      }
+      .contact-bar span:not(:last-child)::after {
+        content: "|";
+        color: #CCC;
+        margin-left: 8px;
+        font-weight: 300;
+      }
+      /* ── Sections ── */
+      .resume-sections {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      section {
+        break-inside: avoid;
+        padding-bottom: 5px;
+      }
+      h3 {
         display: flex;
         align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        letter-spacing: 0.24em;
-        text-transform: uppercase;
-        color: #94a3b8;
-        background: #f8fafc;
+        font-size: 10.5pt;
+        font-weight: 700;
+        color: var(--main-blue);
+        margin-bottom: 3px;
+        padding-bottom: 2px;
+        border-bottom: 1px solid var(--divider-blue);
       }
-      .photo img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        display: block;
+      h3::before {
+        content: "";
+        display: inline-block;
+        width: 4px;
+        height: 12px;
+        background: var(--main-blue);
+        margin-right: 5px;
+        border-radius: 2px;
+        flex-shrink: 0;
       }
-      .resume-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.28fr);
-        gap: 18px;
-        margin-top: 26px;
+      section ul {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        list-style: none;
       }
-      section { display: grid; gap: 12px; break-inside: avoid; border: 1px solid #e5e7eb; padding: 16px 18px; background: white; }
-      section.hero { background: #f8fafc; }
-      section.muted { border-style: dashed; background: #fcfcfd; }
-      section ul { display: grid; gap: 12px; padding: 0; list-style: none; }
-      .text-item { font-size: 14px; line-height: 1.65; color: #334155; }
-      .entry { display: grid; gap: 8px; }
+
+      /* ── Text items ── */
+      .text-item {
+        font-size: 9.2pt;
+        line-height: 1.38;
+        color: var(--text-dark);
+      }
+
+      /* ── Entry items ── */
+      .entry {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
       .entry-head {
         display: flex;
-        align-items: start;
+        align-items: baseline;
         justify-content: space-between;
-        gap: 16px;
-        border-bottom: 1px solid #f1f5f9;
-        padding-bottom: 6px;
+        gap: 8px;
       }
-      .entry-title { font-size: 15px; font-weight: 600; color: #111827; }
-      .entry-subtitle { margin-top: 2px; font-size: 13px; color: #4b5563; }
+      .flex.items-baseline {
+        display: flex;
+        align-items: baseline;
+      }
+      .entry-title {
+        font-size: 9.8pt;
+        font-weight: 700;
+        color: var(--text-dark);
+      }
+      .entry-subtitle {
+        font-size: 8.9pt;
+        color: var(--text-gray);
+      }
+      .entry-subtitle::before {
+        content: " | ";
+        color: #CCC;
+        margin: 0 3px;
+        font-weight: 300;
+      }
       .entry-meta {
         flex-shrink: 0;
-        font-size: 11px;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: #6b7280;
+        font-size: 8.8pt;
+        font-weight: 400;
+        color: var(--text-gray);
+        white-space: nowrap;
       }
-      .entry-summary { font-size: 14px; line-height: 1.7; color: #374151; }
-      .entry-bullets { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
-      .entry-bullets li { font-size: 13px; line-height: 1.65; color: #374151; }
-      footer {
-        border-top: 1px solid #e5e7eb;
-        padding-top: 16px;
-        margin-top: 32px;
-        text-align: right;
-        font-size: 11px;
-        letter-spacing: 0.24em;
-        text-transform: uppercase;
-        color: #94a3b8;
+      .entry-summary {
+        font-size: 9.3pt;
+        line-height: 1.35;
+        color: var(--text-dark);
       }
+      .entry-bullets {
+        margin: 1px 0 0 0;
+        padding-left: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .entry-bullets li {
+        font-size: 9.1pt;
+        line-height: 1.32;
+        color: var(--text-dark);
+      }
+      .entry-bullets li::marker {
+        color: var(--text-gray);
+        font-size: 8pt;
+      }
+
+      /* ── Print ── */
       @page {
         size: A4;
-        margin: 20mm 14mm;
+        margin: 0;
       }
       @media print {
-        body { background: white; }
-        .print-shell { padding: 0; gap: 0; }
+        html, body {
+          width: 210mm;
+          min-height: 297mm;
+          background: white;
+          font-size: 9.5pt;
+        }
+        .print-shell { padding: 0; }
         article {
-          width: auto;
+          width: 210mm;
+          min-height: 297mm;
           margin: 0;
           border: 0;
           border-radius: 0;
           box-shadow: none;
-          padding: 0;
+          padding: 10mm 13mm 10mm 13mm;
         }
-        .resume-grid { gap: 16px; }
       }
     </style>
   </head>
@@ -225,6 +306,98 @@ export function renderResumeDocumentHtml(document: ResumeDocument) {
     <div class="print-shell">${body}</div>
   </body>
 </html>`;
+}
+
+function renderSection(section: ResumeDocumentSection) {
+  return `
+    <section class="${section.tone ?? "standard"}">
+      <h3>${escapeHtml(section.title)}</h3>
+      <ul>
+        ${section.items
+          .map((item) =>
+            item.type === "entry"
+              ? `<li class="entry">
+                  <div class="entry-head">
+                    <div class="flex items-baseline">
+                      <span class="entry-title">${escapeHtml(item.heading)}</span>
+                      ${item.subheading ? `<span class="entry-subtitle">${escapeHtml(item.subheading)}</span>` : ""}
+                    </div>
+                    ${item.meta ? `<span class="entry-meta">${escapeHtml(item.meta)}</span>` : ""}
+                  </div>
+                  ${item.summary ? `<div class="entry-summary">${escapeHtml(item.summary)}</div>` : ""}
+                  ${
+                    item.bullets && item.bullets.length > 0
+                      ? `<ul class="entry-bullets">${item.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>`
+                      : ""
+                  }
+                </li>`
+              : `<li class="text-item">${escapeHtml(item.text)}</li>`
+          )
+          .join("")}
+      </ul>
+    </section>`;
+}
+
+export function getRenderableSections(sections: ResumeDocumentSection[]) {
+  return sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => isRenderableItem(item))
+    }))
+    .filter((section) => section.items.length > 0);
+}
+
+export function getContentSections(sections: ResumeDocumentSection[]) {
+  return sections.filter((section) => section.id !== "personal-info");
+}
+
+export function getHeaderInfo(document: ResumeDocument) {
+  const personalInfo = document.sections.find((section) => section.id === "personal-info");
+  const lines =
+    personalInfo?.items.flatMap((item) =>
+      item.type === "text" ? splitPersonalInfoLine(item.text) : [joinHeaderEntry(item.heading, item.subheading)]
+    ) ?? document.header.contacts ?? [];
+
+  return dedupe(
+    lines
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !/^姓名[：:]/u.test(line))
+      .filter((line) => !/^求职意向[：:]/u.test(line))
+  ).slice(0, 7);
+}
+
+function splitPersonalInfoLine(text: string) {
+  return text
+    .split(/[｜|]/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function joinHeaderEntry(heading: string, subheading?: string) {
+  return [heading, subheading].filter(Boolean).join("：");
+}
+
+function dedupe(values: string[]) {
+  return Array.from(new Set(values));
+}
+
+function isRenderableItem(item: ResumeDocumentSection["items"][number]) {
+  if (item.type === "entry") {
+    return true;
+  }
+
+  return !isPlaceholderText(item.text);
+}
+
+function isPlaceholderText(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return (
+    normalized.startsWith("请补充") ||
+    normalized.startsWith("请继续补充") ||
+    normalized.startsWith("如有相关") ||
+    normalized.startsWith("建议在这里补充")
+  );
 }
 
 function escapeHtml(value: string) {
@@ -244,4 +417,8 @@ function escapeHtml(value: string) {
         return char;
     }
   });
+}
+
+function sanitizeFilenamePart(value: string) {
+  return value.replace(PDF_FILENAME_FORBIDDEN_CHARS, "").trim().replace(/\s+/g, " ");
 }

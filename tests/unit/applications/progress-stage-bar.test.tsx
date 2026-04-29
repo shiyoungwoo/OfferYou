@@ -6,6 +6,7 @@ import { ProgressStageBar } from "@/components/applications/progress-stage-bar";
 describe("ProgressStageBar", () => {
   it("renders the current stage label", () => {
     render(<ProgressStageBar stage="analysis_ready" />);
-    expect(screen.getAllByText("analysis_ready").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("分析").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("输入").length).toBeGreaterThan(0);
   });
 });

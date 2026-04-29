@@ -1,4 +1,7 @@
 import { readWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
+import { cleanGeneratedResumeText, normalizeOcrResumeText } from "@/lib/services/analysis/text-cleaner";
+import { rewriteFactForJd } from "@/lib/services/analysis/suggestion-generator";
+import type { CalibratedResumeProfile } from "@/lib/services/calibration/resume-calibration-types";
 
 export type WorkspaceSummary = {
   fitScore: number;
@@ -17,6 +20,7 @@ export type WorkspaceMasterFactReference = {
 
 export type WorkspaceSuggestion = {
   id: string;
+  candidateId?: string;
   section: string;
   title: string;
   beforeText: string;
@@ -61,6 +65,7 @@ export type WorkspaceData = {
   suggestions: WorkspaceSuggestion[];
   snapshot: WorkspaceSnapshotOutline;
   factSubmissionCount?: number;
+  calibratedResume?: CalibratedResumeProfile;
 };
 
 export async function getAnalysisWorkspaceData(draftId: string): Promise<WorkspaceData> {
@@ -74,103 +79,62 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
       summary: persisted.analysis,
       talentProfileUsed: persisted.talentProfileUsed,
       careerDirectionUsed: persisted.careerDirectionUsed,
+      calibratedResume: persisted.calibratedResume,
       masterFactsUsed: persisted.masterFactsUsed ?? [],
-      suggestions: persisted.suggestions,
-      factSubmissionCount: persisted.factSubmissions.length,
+      suggestions: persisted.suggestions.map(s => {
+        const cleanedBefore = normalizeOcrResumeText(s.beforeText);
+        
+        // Detect stale generic fallback text and repair it on the fly
+        if (s.afterText.includes("相关性较弱") && s.afterText.includes("仅保留时间及岗位")) {
+          // Trigger a lightweight re-generation for this specific item
+          const jdContext = persisted.jdPreview || (persisted.analysis.gaps.join(" ") + " " + persisted.jobTitle);
+          const { after, reason } = rewriteFactForJd(cleanedBefore, jdContext);
+          return {
+            ...s,
+            beforeText: cleanedBefore,
+            afterText: after,
+            reasonText: reason
+          };
+        }
+
+        return {
+          ...s,
+          beforeText: cleanedBefore,
+          afterText: cleanGeneratedResumeText(s.afterText)
+        };
+      }),
+      factSubmissionCount: persisted.factSubmissions?.length ?? 0,
       snapshot: {
-        pageEstimate: 2,
+        pageEstimate: 1,
         sections: [
           {
-            title: "Summary",
-            itemCount: 1,
-            items: [`Tailored for ${persisted.jobTitle} at ${persisted.company}.`]
+            title: "个人优势",
+            itemCount: persisted.suggestions.filter(s => s.section === "summary" && s.status === "accepted").length || 1,
+            items: persisted.suggestions.filter(s => s.section === "summary" && s.status === "accepted").map(s => s.title).slice(0, 3)
           },
           {
-            title: "Accepted Evidence",
-            itemCount: persisted.suggestions.length,
-            items: persisted.suggestions.map((suggestion) => suggestion.title)
+            title: "核心工作经历",
+            itemCount: persisted.suggestions.filter(s => s.section === "experience" && s.status === "accepted").length,
+            items: persisted.suggestions.filter(s => s.section === "experience" && s.status === "accepted").map(s => s.title).slice(0, 3)
           },
           {
-            title: "Source Material",
-            itemCount: 1,
-            items: [persisted.resumeSourceRef ?? "Manual resume source"]
+            title: "重点项目",
+            itemCount: persisted.suggestions.filter(s => s.section === "project" && s.status === "accepted").length,
+            items: persisted.suggestions.filter(s => s.section === "project" && s.status === "accepted").map(s => s.title).slice(0, 3)
           }
         ]
       }
     };
   }
 
+  // Fallback for missing draft
   return {
-    company: "Northstar Careers",
-    jobTitle: "Customer Success Lead",
+    company: "未知岗位",
+    jobTitle: "未知职位",
     stage: "analysis_ready",
-    summary: {
-      fitScore: 74,
-      optimizationMode: "baseline_jd_match",
-      strengths: [
-        "The profile shows repeated strength in guiding people through complexity and reducing ambiguity.",
-        "There is credible evidence of structured problem-solving and trust-building work that can transfer into this role."
-      ],
-      gaps: [
-        "The current story still needs stronger evidence of measurable customer or business outcomes.",
-        "Several experiences need to be reframed more clearly around role-relevant responsibility."
-      ],
-      riskNotes: [
-        "Do not overstate readiness if the strongest evidence is still indirect or highly transferable.",
-        "Keep all strength claims anchored to concrete experiences rather than broad identity labels."
-      ]
-    },
-    talentProfileUsed: undefined,
-    careerDirectionUsed: undefined,
+    summary: { fitScore: 0, optimizationMode: "baseline_jd_match", strengths: [], gaps: [], riskNotes: [] },
     masterFactsUsed: [],
-    suggestions: [
-      {
-        id: `${draftId}-s1`,
-        section: "project",
-        title: "Guidance and clarity evidence",
-        beforeText: "Helped people move through unclear processes and turned messy information into actionable next steps.",
-        afterText:
-          "Guided people through ambiguity by turning scattered information into clear next steps, showing strong fit for customer-facing workflow and support roles.",
-        reasonText: "This reframes the evidence around user guidance, clarity, and trusted execution.",
-        status: "pending",
-        revisionRound: 0,
-        sourceKind: "resume_baseline",
-        sourceLabel: "Resume baseline"
-      },
-      {
-        id: `${draftId}-s2`,
-        section: "experience",
-        title: "Cross-functional delivery evidence",
-        beforeText: "Coordinated multiple moving parts and kept work progressing across ambiguous requirements.",
-        afterText:
-          "Worked across shifting requirements to keep delivery moving, showing transferable strength in coordination, follow-through, and customer-facing execution.",
-        reasonText: "This sharpens transferable strengths instead of forcing the profile into a narrow function-specific frame.",
-        status: "pending",
-        revisionRound: 0,
-        sourceKind: "target_role_fit",
-        sourceLabel: "Role-fit framing"
-      }
-    ],
-    factSubmissionCount: 0,
-    snapshot: {
-      pageEstimate: 2,
-      sections: [
-        {
-          title: "Summary",
-          itemCount: 1,
-          items: ["Candidate with strong guidance, structure, and ambiguity-handling strengths."]
-        },
-        {
-          title: "Projects",
-          itemCount: 2,
-          items: ["Guidance and workflow support", "Cross-functional execution evidence"]
-        },
-        {
-          title: "Skills",
-          itemCount: 3,
-          items: ["Customer guidance", "Workflow clarity", "Structured execution"]
-        }
-      ]
-    }
+    suggestions: [],
+    snapshot: { pageEstimate: 1, sections: [] }
   };
 }

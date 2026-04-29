@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { revalidatePath } from "next/cache";
 import { readWorkspaceDraft, saveWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
+import { generateSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
+
+export const dynamic = "force-dynamic";
 
 export type SuggestionActionInput = {
   draftId: string;
@@ -25,13 +29,39 @@ export async function applySuggestionAction(input: SuggestionActionInput) {
   if (input.action === "accept") {
     suggestion.status = "accepted";
     await saveWorkspaceDraft(draft);
-    return { status: suggestion.status, suggestion };
+
+    try {
+      await generateSnapshotForDraft(input.draftId);
+      revalidatePath(`/applications/${input.draftId}`);
+      revalidatePath(`/applications/${input.draftId}/preview`);
+      return { status: suggestion.status, suggestion, snapshotSynced: true as const };
+    } catch (error) {
+      return {
+        status: suggestion.status,
+        suggestion,
+        snapshotSynced: false as const,
+        snapshotSyncReason: error instanceof Error ? error.message : "自动同步预览失败。"
+      };
+    }
   }
 
   if (input.action === "reject") {
     suggestion.status = "rejected";
     await saveWorkspaceDraft(draft);
-    return { status: suggestion.status, suggestion };
+
+    try {
+      await generateSnapshotForDraft(input.draftId);
+      revalidatePath(`/applications/${input.draftId}`);
+      revalidatePath(`/applications/${input.draftId}/preview`);
+      return { status: suggestion.status, suggestion, snapshotSynced: true as const };
+    } catch (error) {
+      return {
+        status: suggestion.status,
+        suggestion,
+        snapshotSynced: false as const,
+        snapshotSyncReason: error instanceof Error ? error.message : "自动同步预览失败。"
+      };
+    }
   }
 
   suggestion.userFeedbackType = input.feedbackType;

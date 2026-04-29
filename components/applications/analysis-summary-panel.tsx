@@ -25,9 +25,21 @@ export function AnalysisSummaryPanel({
   careerDirectionUsed
 }: AnalysisSummaryPanelProps) {
   const verdict = getVerdict(summary.fitScore);
+  const hasAlignmentContext = Boolean(talentProfileUsed || careerDirectionUsed);
+  const fallbackNote = summary.riskNotes.find((note) => note.includes("确定性回退") || note.includes("调用失败") || note.includes("无法解析为 JSON"));
 
   return (
     <section className="rounded-2xl border border-line bg-white/85 p-5 shadow-card">
+      {fallbackNote ? (
+        <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-line bg-paper px-3.5 py-2.5 text-xs leading-5 text-slate-500 shadow-sm">
+          <div className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400" />
+          <div>
+            <p className="font-semibold text-slate-600">AI 分析已切换到回退方案</p>
+            <p className="mt-0.5 opacity-80">{fallbackNote}</p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-xl border border-accent/20 bg-accent/5 px-4 py-3 text-center">
         <p className="text-xs uppercase tracking-[0.24em] text-accent">匹配度</p>
         <p className="mt-1 text-3xl font-bold text-ink">{summary.fitScore}</p>
@@ -35,6 +47,24 @@ export function AnalysisSummaryPanel({
       </div>
 
       <p className="mt-4 rounded-xl bg-paper px-3 py-2 text-sm leading-6 text-slate-700">{verdict.message}</p>
+
+      {hasAlignmentContext ? (
+        <div className="mt-4 rounded-xl border border-black/5 bg-paper px-4 py-3 text-sm leading-6 text-slate-700">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">天赋对齐视角</p>
+          <p className="mt-2">
+            本次判断已经纳入已确认的优势档案与职业方向，不只是关键词匹配。
+          </p>
+          {talentProfileUsed ? (
+            <p className="mt-2">优势档案：{talentProfileUsed.headline}</p>
+          ) : null}
+          {careerDirectionUsed ? (
+            <p className="mt-2">当前方向：{careerDirectionUsed.label}</p>
+          ) : null}
+          {masterFactsUsed.length > 0 ? (
+            <p className="mt-2">已复用事实：{masterFactsUsed.length} 条</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-4 space-y-3">
         <CompactList title="优势" items={summary.strengths} />

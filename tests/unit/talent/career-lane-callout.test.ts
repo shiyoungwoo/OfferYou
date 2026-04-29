@@ -38,7 +38,8 @@ describe("getCareerLaneCallout", () => {
               slug: "customer-success-and-relationship-led-roles",
               label: "客户成功、客户关系与服务推进类方向",
               rationale: "能快速建立信任，让客户、同事或合作方更愿意跟着你推进。",
-              watchOut: "先拿真实岗位验证，再决定是否长期押注这个方向。"
+              watchOut: "先拿真实岗位验证，再决定是否长期押注这个方向。",
+              suggestedRoles: []
             }
           ],
           whyTheseDirectionsFit: [],

@@ -23,6 +23,6 @@ export class LocalStorageAdapter implements StorageAdapter {
   }
 
   private sanitizeFilename(filename: string) {
-    return filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+    return filename.replace(/[\/\\:*?"<>|]/g, "_");
   }
 }

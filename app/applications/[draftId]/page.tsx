@@ -1,9 +1,12 @@
 import { AnalysisSummaryPanel } from "@/components/applications/analysis-summary-panel";
+import { ResumeCalibrationPanel } from "@/components/applications/resume-calibration-panel";
 import { ProgressStageBar } from "@/components/applications/progress-stage-bar";
 import { SnapshotGenerateButton } from "@/components/applications/snapshot-generate-button";
 import { SnapshotOutlinePanel } from "@/components/applications/snapshot-outline-panel";
 import { SuggestionList } from "@/components/applications/suggestion-list";
 import { getAnalysisWorkspaceData } from "@/lib/services/analysis/workspace-data";
+
+export const dynamic = "force-dynamic";
 
 type ApplicationWorkspacePageProps = {
   params: Promise<{
@@ -16,7 +19,7 @@ export default async function ApplicationWorkspacePage({ params }: ApplicationWo
   const workspace = await getAnalysisWorkspaceData(draftId);
 
   return (
-    <main className="min-h-screen px-6 py-8 md:px-10">
+    <main className="min-h-screen px-6 py-8 md:px-10 overflow-x-hidden">
       <section className="mx-auto flex max-w-7xl flex-col gap-5">
         <header className="rounded-2xl border border-white/70 bg-white/85 px-6 py-5 shadow-card">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -28,8 +31,13 @@ export default async function ApplicationWorkspacePage({ params }: ApplicationWo
           </div>
         </header>
 
-        <section className="grid gap-5 xl:grid-cols-[3fr_1fr]">
-          <SuggestionList draftId={draftId} suggestions={workspace.suggestions} />
+        <section className="grid gap-5 2xl:grid-cols-[3fr_1fr] min-w-0">
+          <div className="min-w-0">
+            <div className="mb-5">
+              <ResumeCalibrationPanel calibratedResume={workspace.calibratedResume} />
+            </div>
+            <SuggestionList draftId={draftId} suggestions={workspace.suggestions} />
+          </div>
 
           <aside className="flex flex-col gap-5">
             <AnalysisSummaryPanel

@@ -2,6 +2,9 @@ import { executeSql, querySql, sqlString } from "@/lib/db";
 import { composeSnapshotDocument } from "@/lib/services/snapshot/snapshot-composer";
 import { readWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import type { ResumeDocument } from "@/lib/document/resume-document";
+import { estimateResumePageCount, renderResumeDocumentHtml } from "@/lib/services/export/preview-renderer";
+import { measureResumeHtmlPageCount } from "@/lib/services/export/pdf-export-service";
+import { generateFinalResumeDraft } from "@/lib/services/snapshot/final-resume-draft-service";
 
 export async function generateSnapshotForDraft(draftId: string) {
   const draft = await readWorkspaceDraft(draftId);
@@ -10,14 +13,25 @@ export async function generateSnapshotForDraft(draftId: string) {
     throw new Error("Draft not found.");
   }
 
-  const document = await composeSnapshotDocument(draft);
+  const acceptedSuggestions = draft.suggestions.filter((suggestion) => suggestion.status === "accepted");
+  const document = draft.calibratedResume
+    ? await generateFinalResumeDraft({
+        calibratedResume: draft.calibratedResume,
+        jdText: draft.jdPreview ?? "",
+        acceptedSuggestions,
+        company: draft.company,
+        jobTitle: draft.jobTitle,
+        resumeExtractedText: draft.resumeExtractedText
+      })
+    : await composeSnapshotDocument(draft);
   await saveSnapshotDocument(draftId, document);
+  const pageEstimate = await estimateSnapshotPageCount(document);
 
   return {
     draftId,
     templateKey: document.templateKey,
     snapshotPath: `sqlite://snapshots/${draftId}`,
-    pageEstimate: Math.max(1, Math.ceil(document.sections.reduce((sum, section) => sum + section.items.length, 0) / 6)),
+    pageEstimate,
     document
   };
 }
@@ -49,4 +63,20 @@ export async function saveSnapshotDocument(draftId: string, document: ResumeDocu
       payload_json = excluded.payload_json,
       updated_at = CURRENT_TIMESTAMP;
   `);
+}
+
+async function estimateSnapshotPageCount(document: ResumeDocument) {
+  try {
+    const html = renderResumeDocumentHtml(document);
+    return await measureResumeHtmlPageCount(html);
+  } catch (error) {
+    if (process.env.OFFERYOU_DEBUG_EXPORT === "1") {
+      console.warn(
+        "[OfferYou Snapshot] Chromium page measurement failed; falling back to rough page estimate.",
+        error instanceof Error ? error.message : error
+      );
+    }
+
+    return estimateResumePageCount(document);
+  }
 }

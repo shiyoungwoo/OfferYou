@@ -1,17 +1,19 @@
 "use client";
 
 import React from "react";
+import type { ResumeTemplateKey } from "@/lib/document/resume-document";
 
 type TemplateSwitcherProps = {
-  currentTemplate: string;
+  currentTemplate: ResumeTemplateKey;
+  onChange: (templateKey: ResumeTemplateKey) => void;
 };
 
 const templates = [
-  { key: "template_a", label: "经典" },
-  { key: "template_b", label: "简约" }
-];
+  { key: "professional-cn", label: "Professional CN" },
+  { key: "ats-clean", label: "ATS Clean" }
+] as const satisfies Array<{ key: ResumeTemplateKey; label: string }>;
 
-export function TemplateSwitcher({ currentTemplate }: TemplateSwitcherProps) {
+export function TemplateSwitcher({ currentTemplate, onChange }: TemplateSwitcherProps) {
   return (
     <div className="flex gap-1">
       {templates.map((t) => (
@@ -23,6 +25,8 @@ export function TemplateSwitcher({ currentTemplate }: TemplateSwitcherProps) {
               : "text-slate-600 hover:bg-slate-100"
           }`}
           type="button"
+          aria-pressed={currentTemplate === t.key}
+          onClick={() => onChange(t.key)}
         >
           {t.label}
         </button>

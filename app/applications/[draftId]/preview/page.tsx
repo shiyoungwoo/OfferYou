@@ -1,6 +1,8 @@
 import { PreviewWorkspace } from "@/components/preview/preview-workspace";
 import { readSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
 
+export const dynamic = "force-dynamic";
+
 type PreviewPageProps = {
   params: Promise<{
     draftId: string;

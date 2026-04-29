@@ -10,6 +10,8 @@ export type ApplicationRecord = {
   company: string;
   jobTitle: string;
   exportStoragePath?: string;
+  interviewPrepId?: string;
+  interviewStatus?: "none" | "preparing" | "scheduled" | "finished";
   appliedAt: string;
   acceptedSuggestionCount: number;
   reusedMasterFacts: Array<{
@@ -38,6 +40,7 @@ export async function createApplicationRecord(input: {
     company: draft.company,
     jobTitle: draft.jobTitle,
     exportStoragePath: input.exportStoragePath,
+    interviewStatus: "none",
     appliedAt: new Date().toISOString(),
     acceptedSuggestionCount: draft.suggestions.filter((item) => item.status === "accepted").length,
     reusedMasterFacts: draft.masterFactsUsed ?? []
@@ -71,6 +74,32 @@ export async function readApplicationRecord(recordId: string): Promise<Applicati
   return normalizeApplicationRecord(JSON.parse(rows[0].payload_json) as Partial<ApplicationRecord>);
 }
 
+export async function updateApplicationRecordInterviewPrep(input: {
+  recordId: string;
+  interviewPrepId: string;
+  interviewStatus: NonNullable<ApplicationRecord["interviewStatus"]>;
+}): Promise<ApplicationRecord> {
+  const record = await readApplicationRecord(input.recordId);
+
+  if (!record) {
+    throw new Error("Application record not found.");
+  }
+
+  const updated: ApplicationRecord = {
+    ...record,
+    interviewPrepId: input.interviewPrepId,
+    interviewStatus: input.interviewStatus
+  };
+
+  await executeSql(`
+    UPDATE application_records
+    SET payload_json = ${sqlString(JSON.stringify(updated))}
+    WHERE id = ${sqlString(input.recordId)};
+  `);
+
+  return updated;
+}
+
 export async function listApplicationRecords(): Promise<ApplicationRecord[]> {
   const rows = await querySql<{ payload_json: string }>(
     "SELECT payload_json FROM application_records ORDER BY applied_at DESC;"
@@ -87,6 +116,8 @@ function normalizeApplicationRecord(record: Partial<ApplicationRecord>): Applica
     company: record.company ?? "",
     jobTitle: record.jobTitle ?? "",
     exportStoragePath: record.exportStoragePath,
+    interviewPrepId: record.interviewPrepId,
+    interviewStatus: record.interviewStatus ?? "none",
     appliedAt: record.appliedAt ?? "",
     acceptedSuggestionCount: record.acceptedSuggestionCount ?? 0,
     reusedMasterFacts: record.reusedMasterFacts ?? []

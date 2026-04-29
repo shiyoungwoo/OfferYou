@@ -18,11 +18,11 @@ describe("SnapshotGenerateButton", () => {
     push.mockReset();
   });
 
-  it("renders the confirmation-oriented generate copy", () => {
+  it("renders the sync-to-preview copy", () => {
     render(<SnapshotGenerateButton acceptedSuggestionCount={2} draftId="draft-1" totalSuggestionCount={5} />);
 
-    expect(screen.getByText(/当前已确认 2 \/ 5 条修改建议/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "确认并生成简历初版" })).toBeTruthy();
+    expect(screen.getByText(/已确认 2 \/ 5 条修改建议/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "同步并预览" })).toBeTruthy();
   });
 
   it("navigates to preview after successful generation", async () => {
@@ -36,7 +36,7 @@ describe("SnapshotGenerateButton", () => {
 
     render(<SnapshotGenerateButton acceptedSuggestionCount={1} draftId="draft-1" totalSuggestionCount={3} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "确认并生成简历初版" }));
+    fireEvent.click(screen.getByRole("button", { name: "同步并预览" }));
 
     await waitFor(() => {
       expect(push).toHaveBeenCalledWith("/applications/draft-1/preview");

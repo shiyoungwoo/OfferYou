@@ -49,7 +49,8 @@ describe("applyFactSubmissionAction", () => {
           reusableForMaster: false,
           status: "pending_confirmation"
         }
-      ]
+      ],
+      masterFactsUsed: []
     });
   });
 

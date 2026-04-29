@@ -9,11 +9,10 @@ export type ApplicationDraftDefaults = {
 };
 
 const fallbackDefaults: ApplicationDraftDefaults = {
-  company: "OfferYou 示例岗位",
-  jobTitle: "客户成功经理",
-  jdContent:
-    "我们希望你能在复杂流程中带着客户往前走，快速建立信任，协调多方，并把模糊需求变成清晰行动。",
-  resumeAssetRef: "manual://career-story-notes"
+  company: "",
+  jobTitle: "",
+  jdContent: "",
+  resumeAssetRef: ""
 };
 
 export function getApplicationDraftDefaults({

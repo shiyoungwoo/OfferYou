@@ -28,22 +28,6 @@ export type MasterInsightSummary = {
   evidenceLabels: string[];
 };
 
-const insightSeed: MasterInsightSummary[] = [
-  {
-    id: "insight-workflow-abstraction",
-    title: "Workflow abstraction under ambiguity",
-    insightText: "Likely strongest when turning messy human processes into explicit operating workflows.",
-    status: "pending_confirmation",
-    evidenceLabels: ["OfferYou", "Cross-platform content systems"]
-  },
-  {
-    id: "insight-zero-to-one",
-    title: "Zero-to-one product orientation",
-    insightText: "Shows repeated preference for system definition and operating model design over narrow feature polishing.",
-    status: "confirmed",
-    evidenceLabels: ["MVP protocol design", "AI workflow packaging"]
-  }
-];
 
 export function canCreateMasterFact(state: MasterState) {
   return Boolean(state.integrityNoticeConfirmedAt);
@@ -99,5 +83,5 @@ export async function listMasterFacts(userId: string): Promise<MasterFactSummary
 }
 
 export function listMasterInsights(_userId: string): MasterInsightSummary[] {
-  return insightSeed;
+  return [];
 }

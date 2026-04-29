@@ -1,9 +1,32 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applySuggestionAction } from "@/lib/services/analysis/suggestion-action-service";
 import { readWorkspaceDraft, saveWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
+import { generateSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
+
+vi.mock("@/lib/services/snapshot/snapshot-service", () => ({
+  generateSnapshotForDraft: vi.fn().mockResolvedValue({
+    draftId: "draft-1",
+    templateKey: "professional-cn",
+    snapshotPath: "sqlite://snapshots/draft-1",
+    pageEstimate: 1,
+    document: {
+      templateKey: "professional-cn",
+      header: {
+        name: "OfferYou",
+        title: "AI Product Manager",
+        meta: []
+      },
+      sections: []
+    }
+  })
+}));
+
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn()
+}));
 
 let tempDir: string;
 let previousCwd: string;
@@ -51,7 +74,8 @@ describe("applySuggestionAction", () => {
           revisionRound: 0
         }
       ],
-      factSubmissions: []
+      factSubmissions: [],
+      masterFactsUsed: []
     });
   });
 
@@ -70,10 +94,22 @@ describe("applySuggestionAction", () => {
     });
 
     expect(result.status).toBe("needs_revision");
-    expect(result.childSuggestion.parentSuggestionId).toBe("s1");
-    expect(result.childSuggestion.revisionRound).toBe(1);
-    expect(result.childSuggestion.sourceKind).toBe("revision");
-    expect(result.childSuggestion.sourceLabel).toContain("Master fact");
+    expect(result.childSuggestion!.parentSuggestionId).toBe("s1");
+    expect(result.childSuggestion!.revisionRound).toBe(1);
+    expect(result.childSuggestion!.sourceKind).toBe("revision");
+    expect(result.childSuggestion!.sourceLabel).toContain("Master fact");
+  });
+
+  it("syncs the snapshot when a suggestion is accepted", async () => {
+    const result = await applySuggestionAction({
+      draftId: "draft-1",
+      action: "accept",
+      suggestionId: "s1"
+    });
+
+    expect(result.status).toBe("accepted");
+    expect(result.snapshotSynced).toBe(true);
+    expect(vi.mocked(generateSnapshotForDraft)).toHaveBeenCalledWith("draft-1");
   });
 
   it("creates a pending fact submission when feedback adds new fact material", async () => {
@@ -86,7 +122,7 @@ describe("applySuggestionAction", () => {
     });
 
     expect(result.status).toBe("needs_revision");
-    expect(result.childSuggestion.userFeedbackType).toBe("adding_new_fact");
+    expect(result.childSuggestion!.userFeedbackType).toBe("adding_new_fact");
     const persisted = await readWorkspaceDraft("draft-1");
     expect(persisted?.factSubmissions.length).toBe(1);
     expect(persisted?.factSubmissions[0]?.submissionText).toContain("instrumentation rollout");

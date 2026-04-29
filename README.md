@@ -1,108 +1,82 @@
 # OfferYou
 
-### Stop applying. Start being discovered.
-### 别海投了，让 Offer 来找你。
+### 先把简历改到能投，再把面试准备和天赋发现接上。
+### 一个面向真实求职的简历定制与面试准备工作台。
 
 ---
 
-OfferYou is an AI-powered resume optimization assistant that goes beyond keyword matching. Through structured dialogue, it **uncovers your deep, latent talents** — then uses that insight to create sharper, more authentic CVs.
+OfferYou 现在的目标很明确：先把一条真实可用的求职链路跑通。
 
-## 🧬 What Makes OfferYou Different?
+当前 MVP 关注四件事：
 
-### 🔮 Talent Radar
-Before touching your resume, OfferYou asks **3 precise questions** to build a Talent Profile Card. This card changes how your resume is analyzed: instead of just matching keywords, it evaluates whether a role fits your **natural energy pattern**.
+- 岗位定制：输入 JD 和简历，先看差距，再生成可投递快照。
+- 面试准备：基于投递记录生成问题、自我介绍和答案草稿，并支持导出可复制的复盘文本。
+- 天赋发现：把真实经历沉淀成更长期的优势判断。
+- 事实主档：确认过的经历才进入长期资料层。
 
-### 🔬 Deep Talent Excavation
-A 30-60 minute Socratic dialogue (up to 10 questions) that produces a comprehensive **Talent Manual** — combining Gallup StrengthsFinder theory, Flow theory, and Jungian shadow work to map your foundational talents to concrete career directions.
-
-### 🛡️ Absolute Distortion Prevention
-Your resume is yours. OfferYou never fabricates achievements. Every optimization is traceable to your original data, presented side-by-side for your approval.
-
-### 📸 Snapshot Derivation
-Each tailored CV is an independent snapshot from your "Master Repository." Your core facts stay clean; job-specific versions are disposable.
-
-### 📐 Three-Layer Data Model
-| Layer | What It Holds | Who Controls It |
-|-------|--------------|----------------|
-| **Fact** | First-hand experiences | You — only verified facts enter Master |
-| **Insight** | Talents, competency patterns | AI proposes, you confirm |
-| **Expression** | JD-specific wording & emphasis | Per-application, disposable |
-
-## 👀 See It in Action
-
-Check out the **[Career Switch Demo](examples/demo_career_switch.md)** — a sanitized real case where a banking professional transitions to an AI Product Manager role using the full OfferYou pipeline (Agent Mode).
-
-## 🚀 Quick Start
-
-### Web Mode (Recommended)
-```bash
-pnpm install && pnpm dev
-```
-Then open `http://localhost:3000`:
-- `/talent` — Discover your talents (Talent Radar + Deep Excavation)
-- `/applications/new` — Create a job-specific draft
-- `/me` — Your dashboard: talents, facts, applications
-
-### Agent Mode (Prompt-Driven)
-Use the prompts directly with any AI assistant:
-1. `prompts/talent_radar.md` → Talent Profile Card
-2. `prompts/gap_analysis.md` → JD match analysis
-3. `prompts/rewrite_expert.md` → Mentor-mode suggestions
-4. `prompts/talent_excavation.md` → Deep talent discovery
-
-## 📦 Repository Structure
-
-```
-OfferYou/
-├── app/                                  # Next.js App Router (pages + API)
-├── components/                           # Product UI components
-├── lib/                                  # Services, storage, document model
-├── prompts/                              # Core AI Prompts
-│   ├── talent_radar.md                   # ⭐ 3-question talent profiling
-│   ├── talent_excavation.md              # 🔬 Deep discovery (≤10 questions)
-│   ├── gap_analysis.md                   # Recruiter-persona JD analysis
-│   └── rewrite_expert.md                 # STAR-method optimization
-├── templates/                            # Resume & talent card templates
-├── examples/                             # Agent Mode demo cases
-├── design/                               # Architecture preview (API specs)
-├── docs/plans/                           # Product design & implementation plans
-├── prisma/                               # Target schema (future Prisma adoption)
-├── tests/                                # Unit and integration tests
-├── SKILL.md                              # Agent execution contract
-└── README.md                             # You are here
-```
-
-## 🗺️ Roadmap
-
-| Phase | Feature | Status |
-|-------|---------|--------|
-| v0.1 | Job Apply Skill + Talent Radar (Prompt-driven) | ✅ Released |
-| v2.0 | Web MVP: Analysis → Suggestions → Snapshot → PDF Export | ✅ Running |
-| v3.0 | Talent Discovery in Web UI + `/me` Dashboard | ✅ Running |
-| v3.x | Demo Hardening (Create Draft fix, seed cleanup, fact confirm) | 🔧 In Progress |
-| v4.0 | Model-backed analysis (replace deterministic layer) | 📋 Planned |
-| v5.0 | Full SaaS: Multi-user, auth, career matching engine | 🌟 Vision |
-
-## 🛠️ Development
+## 快速开始
 
 ```bash
-pnpm install    # Install dependencies
-pnpm dev        # Start development server
-pnpm build      # Production build
-pnpm test       # Run test suite
+pnpm install
+pnpm dev
 ```
 
-**Requirements**: Node 22+, pnpm, sqlite3 CLI
+打开 `http://localhost:3000` 后，优先看这几个入口：
 
-## 🤝 Contributing
-PRs welcome! Especially interested in:
-- Model-backed analysis implementations
-- Additional talent assessment frameworks
-- Localized prompt variants
-- ATS platform integrations
+- `/applications/new` - 修改简历和生成快照
+- `/prep` - 面试准备
+- `/talent` - 发现自己
+- `/me` - 我的资料
 
-## 📜 License
-MIT
+## 本地验证
 
----
-*Part of the [OrbitOS](https://github.com/nicekid1/OrbitOS) Ecosystem. Built for Agentic Workflows.*
+```bash
+pnpm check:vnext
+pnpm report:self-use
+pnpm test
+pnpm test:e2e -- tests/e2e/vnext-main-path.spec.ts
+pnpm export:fixtures
+pnpm build
+```
+
+`pnpm check:vnext` 会检查核心页面、投递记录、面试准备、样本夹具、质量服务和模型入口文件是否齐备。`pnpm report:self-use` 会生成自用 Beta 报告，汇总样本质量、PDF 路径、Interview Prep 与主要风险提示。
+
+## 模型配置
+
+- Gemini：设置 `GEMINI_API_KEY`，可选设置 `GEMINI_MODEL`。
+- OpenAI 兼容模式：设置 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`。
+- 都未配置时会自动使用 `deterministic_fallback`，用于本地验证和无 Key 场景。
+
+## 模型能力说明
+
+OfferYou 支持文本模型、多模态模型和确定性兜底。文本模型适合 JD 匹配和中文改写；多模态模型适合处理 JD 截图、PDF 页面截图和 OCR 校准；确定性兜底只用于无 Key 时的基础整理和本地验证。
+
+## 数据与清理
+
+- `storage/offeryou.sqlite` 保存草稿、快照、投递记录、面试准备、天赋档案和事实主档。
+- `storage/<userId>/` 下保存上传文件和导出的 PDF 产物。
+- `docs/quality/` 保存样本导出报告、真实试跑报告和人工复查产物。
+- 模型密钥只应放在本地环境变量或 `.env.local` 中，不要写进仓库，也不要在文档里贴原文。
+- 如果需要重置本地数据，可以先停止开发服务，再删除 `storage/offeryou.sqlite`、`storage/<userId>/` 以及相关的 `docs/quality/*-artifacts/` 目录。
+- 重置后建议重新运行 `pnpm check:vnext` 和 `pnpm test`，确认基础链路仍然可用。
+
+## 验收入口
+
+- [自用求职验收清单](docs/quality/offeryou-self-use-acceptance.md)
+- [样本导出报告](docs/quality/job-apply-fixture-outputs.md)
+
+## 代码结构
+
+- `app/`：页面与 API 路由
+- `components/`：页面组件
+- `lib/`：服务层、存储层、文档模型
+- `tests/`：单测、集成测试、端到端测试
+- `scripts/`：检查脚本与样本导出脚本
+- `docs/quality/`：自用验收与样本报告
+
+## 说明
+
+- `AIPM` 是项目动机和作品集叙事，不是首页产品定位。
+- PDF 输入解析会优先尝试 `opendataloader-pdf` CLI，未安装时自动回退到本地轻量解析。
+- 简历快照与 PDF 导出使用同一份文档，避免预览和导出不一致。
+- 真实经历优先，推断内容只保留在建议层，不回写事实主档。

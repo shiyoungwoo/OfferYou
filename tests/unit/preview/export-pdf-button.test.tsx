@@ -9,14 +9,10 @@ describe("ExportPdfButton", () => {
     vi.unstubAllGlobals();
   });
 
-  it("requires explicit confirmation before export", () => {
+  it("renders the combined confirmation and export action", () => {
     render(<ExportPdfButton draftId="draft-1" />);
 
-    expect(screen.getByRole("button", { name: "确认无误后导出 PDF" })).toHaveProperty("disabled", true);
-
-    fireEvent.click(screen.getByLabelText(/我已经确认/i));
-
-    expect(screen.getByRole("button", { name: "确认无误后导出 PDF" })).toHaveProperty("disabled", false);
+    expect(screen.getByRole("button", { name: "确认内容并导出 PDF" })).toHaveProperty("disabled", false);
   });
 
   it("shows the record link after successful export", async () => {
@@ -33,8 +29,7 @@ describe("ExportPdfButton", () => {
 
     render(<ExportPdfButton draftId="draft-1" />);
 
-    fireEvent.click(screen.getByLabelText(/我已经确认/i));
-    fireEvent.click(screen.getByRole("button", { name: "确认无误后导出 PDF" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认内容并导出 PDF" }));
 
     await waitFor(() => {
       expect(screen.getByRole("link", { name: "查看这次简历记录" }).getAttribute("href")).toBe(
@@ -56,7 +51,7 @@ describe("ExportPdfButton", () => {
     render(
       <ExportPdfButton
         document={{
-          templateKey: "template_a",
+          templateKey: "professional-cn",
           header: {
             name: "王小明",
             title: "产品经理",
@@ -68,8 +63,7 @@ describe("ExportPdfButton", () => {
       />
     );
 
-    fireEvent.click(screen.getByLabelText(/我已经确认/i));
-    fireEvent.click(screen.getByRole("button", { name: "确认无误后导出 PDF" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认内容并导出 PDF" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -78,7 +72,7 @@ describe("ExportPdfButton", () => {
           method: "POST",
           body: JSON.stringify({
             document: {
-              templateKey: "template_a",
+              templateKey: "professional-cn",
               header: {
                 name: "王小明",
                 title: "产品经理",
@@ -90,5 +84,30 @@ describe("ExportPdfButton", () => {
         })
       );
     });
+  });
+
+  it("shows a page warning when the document is over two pages", () => {
+    const sections = Array.from({ length: 25 }, (_, index) => ({
+      id: `s${index + 1}`,
+      title: `第 ${index + 1} 段`,
+      items: [{ type: "text" as const, text: String(index + 1) }]
+    }));
+
+    render(
+      <ExportPdfButton
+        document={{
+          templateKey: "professional-cn",
+          header: {
+            name: "王小明",
+            title: "产品经理",
+            meta: []
+          },
+          sections
+        }}
+        draftId="draft-1"
+      />
+    );
+
+    expect(screen.getByText("两页版本，建议保留重点")).toBeTruthy();
   });
 });

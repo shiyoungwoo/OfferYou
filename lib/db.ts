@@ -42,6 +42,13 @@ export async function ensureDatabase() {
       applied_at TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS interview_preps (
+      id TEXT PRIMARY KEY,
+      application_record_id TEXT NOT NULL UNIQUE,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE TABLE IF NOT EXISTS master_facts (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,

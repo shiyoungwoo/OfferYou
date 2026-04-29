@@ -1,4 +1,5 @@
 import { executeSql, querySql, sqlString } from "@/lib/db";
+import type { CalibratedResumeProfile } from "@/lib/services/calibration/resume-calibration-types";
 
 export type PersistedWorkspaceDraft = {
   id: string;
@@ -17,6 +18,7 @@ export type PersistedWorkspaceDraft = {
   resumeSourceRef?: string;
   profilePhotoAssetRef?: string;
   resumeExtractedText: string;
+  calibratedResume?: CalibratedResumeProfile;
   analysis: {
     fitScore: number;
     optimizationMode: "baseline_jd_match" | "talent_amplified";
@@ -44,6 +46,7 @@ export type PersistedWorkspaceDraft = {
   }>;
   suggestions: Array<{
     id: string;
+    candidateId?: string;
     section: string;
     title: string;
     beforeText: string;
