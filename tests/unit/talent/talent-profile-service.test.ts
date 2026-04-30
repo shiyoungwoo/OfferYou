@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { executeSql } from "@/lib/db";
 import { buildCareerNavigation } from "@/lib/services/talent/career-navigation";
 import {
   confirmCareerNavigation,
@@ -63,5 +64,44 @@ describe("talent-profile-service", () => {
     expect(preview.directions.length).toBeGreaterThan(0);
     expect(record.navigation.directions[0]?.slug).toBeTruthy();
     expect(latest?.id).toBe(record.id);
+  });
+
+  it("returns null when the latest confirmed talent profile payload is corrupted", async () => {
+    await executeSql(`
+      INSERT INTO talent_profiles (id, user_id, status, payload_json, confirmed_at, created_at, updated_at)
+      VALUES (
+        'talent-broken-1',
+        'default-user',
+        'confirmed',
+        '{"id":',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      );
+    `);
+
+    const latest = await getLatestConfirmedTalentProfile("default-user");
+
+    expect(latest).toBeNull();
+  });
+
+  it("returns null when the latest confirmed career navigation payload is corrupted", async () => {
+    await executeSql(`
+      INSERT INTO career_navigation_profiles (id, user_id, talent_profile_id, status, payload_json, confirmed_at, created_at, updated_at)
+      VALUES (
+        'career-nav-broken-1',
+        'default-user',
+        'talent-profile-1',
+        'confirmed',
+        '{"id":',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      );
+    `);
+
+    const latest = await getLatestConfirmedCareerNavigationForTalentProfile("default-user", "talent-profile-1");
+
+    expect(latest).toBeNull();
   });
 });

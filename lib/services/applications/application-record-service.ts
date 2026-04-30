@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { executeSql, querySql, sqlString } from "@/lib/db";
 import { readWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import { readSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
+import { parseJsonPayload } from "@/lib/services/persistence/json-payload";
 
 export type ApplicationRecord = {
   id: string;
@@ -71,7 +72,8 @@ export async function readApplicationRecord(recordId: string): Promise<Applicati
     return null;
   }
 
-  return normalizeApplicationRecord(JSON.parse(rows[0].payload_json) as Partial<ApplicationRecord>);
+  const parsed = parseJsonPayload<Partial<ApplicationRecord>>(rows[0].payload_json, "投递记录");
+  return parsed.ok ? normalizeApplicationRecord(parsed.value) : null;
 }
 
 export async function updateApplicationRecordInterviewPrep(input: {
@@ -105,7 +107,16 @@ export async function listApplicationRecords(): Promise<ApplicationRecord[]> {
     "SELECT payload_json FROM application_records ORDER BY applied_at DESC;"
   );
 
-  return rows.map((row) => normalizeApplicationRecord(JSON.parse(row.payload_json) as Partial<ApplicationRecord>));
+  const records: ApplicationRecord[] = [];
+
+  for (const row of rows) {
+    const parsed = parseJsonPayload<Partial<ApplicationRecord>>(row.payload_json, "投递记录");
+    if (parsed.ok) {
+      records.push(normalizeApplicationRecord(parsed.value));
+    }
+  }
+
+  return records;
 }
 
 function normalizeApplicationRecord(record: Partial<ApplicationRecord>): ApplicationRecord {

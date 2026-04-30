@@ -1,5 +1,6 @@
 import { executeSql, querySql, sqlString } from "@/lib/db";
 import type { CalibratedResumeProfile } from "@/lib/services/calibration/resume-calibration-types";
+import { parseJsonPayload } from "@/lib/services/persistence/json-payload";
 
 export type PersistedWorkspaceDraft = {
   id: string;
@@ -101,7 +102,8 @@ export async function readWorkspaceDraft(draftId: string): Promise<PersistedWork
     return null;
   }
 
-  return JSON.parse(rows[0].payload_json) as PersistedWorkspaceDraft;
+  const parsed = parseJsonPayload<PersistedWorkspaceDraft>(rows[0].payload_json, "简历草稿");
+  return parsed.ok ? parsed.value : null;
 }
 
 export async function listWorkspaceDrafts(): Promise<PersistedWorkspaceDraft[]> {
@@ -109,5 +111,14 @@ export async function listWorkspaceDrafts(): Promise<PersistedWorkspaceDraft[]> 
     "SELECT payload_json FROM workspace_drafts ORDER BY updated_at DESC;"
   );
 
-  return rows.map((row) => JSON.parse(row.payload_json) as PersistedWorkspaceDraft);
+  const drafts: PersistedWorkspaceDraft[] = [];
+
+  for (const row of rows) {
+    const parsed = parseJsonPayload<PersistedWorkspaceDraft>(row.payload_json, "简历草稿");
+    if (parsed.ok) {
+      drafts.push(parsed.value);
+    }
+  }
+
+  return drafts;
 }
