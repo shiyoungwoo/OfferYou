@@ -1,5 +1,22 @@
-import { describe, expect, it } from "vitest";
-import { generateSeedSuggestions, rewriteFactForJd } from "@/lib/services/analysis/suggestion-generator";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { callModelJSON } = vi.hoisted(() => ({
+  callModelJSON: vi.fn()
+}));
+
+vi.mock("@/lib/ai/model-gateway", () => ({
+  callModelJSON
+}));
+
+import {
+  generateAISuggestions,
+  generateSeedSuggestions,
+  rewriteFactForJd
+} from "@/lib/services/analysis/suggestion-generator";
+
+beforeEach(() => {
+  callModelJSON.mockReset();
+});
 
 describe("generateSeedSuggestions", () => {
   it("ranks strongly related facts ahead of weakly related ones", () => {
@@ -171,5 +188,117 @@ describe("generateSeedSuggestions", () => {
     expect(suggestions[0]?.candidateId).toBe("project-1");
     expect(suggestions[0]?.beforeText).not.toContain("湖南工业大学");
     expect(suggestions[0]?.beforeText).not.toContain("英语六级");
+  });
+
+  it("uses model output when the provider returns suggestions", async () => {
+    callModelJSON.mockResolvedValue({
+      provider: "openai_compatible",
+      data: {
+        suggestions: [
+          {
+            section: "project",
+            title: "OfferYou 项目",
+            before: "原始项目内容",
+            after: "独立主导 AI 求职辅助产品 OfferYou 的产品定义、需求拆解与三阶段核心流程落地。",
+            reason: "聚焦 AI 产品流程与落地"
+          }
+        ]
+      }
+    });
+
+    const suggestions = await generateAISuggestions(
+      {
+        jdText: "招聘 AI 产品经理，要求 AI 产品设计、Prompt 迭代和数据分析。",
+        facts: [
+          {
+            text: "原始项目内容",
+            section: "project",
+            title: "OfferYou 项目",
+            sourceKind: "master_fact",
+            sourceLabel: "简历原文"
+          }
+        ],
+        gaps: [],
+        keywordsToBridge: ["AI", "Prompt", "数据分析"]
+      },
+      { modelProvider: "openai_compatible" }
+    );
+
+    expect(callModelJSON).toHaveBeenCalledOnce();
+    expect(suggestions[0]?.afterText).toContain("AI 求职辅助产品 OfferYou");
+    expect(suggestions[0]?.generationMode).toBe("model");
+    expect(suggestions[0]?.modelProvider).toBe("openai_compatible");
+  });
+
+  it("annotates model fallback reasons when the gateway falls back", async () => {
+    callModelJSON.mockResolvedValue({
+      provider: "deterministic_fallback",
+      data: null,
+      fallbackReason: "Gemini 返回内容无法解析为 JSON，已切换到确定性回退。"
+    });
+
+    const suggestions = await generateAISuggestions(
+      {
+        jdText: "招聘 AI 产品经理，要求 AI 产品设计、Prompt 迭代和数据分析。",
+        facts: [
+          {
+            text: "独立主导 AI 求职辅助产品 OfferYou 的产品定义、需求拆解和三阶段核心流程落地，覆盖简历解析、JD 对齐分析与导出链路。",
+            section: "project",
+            title: "OfferYou 项目",
+            sourceKind: "master_fact",
+            sourceLabel: "简历原文"
+          }
+        ],
+        gaps: [],
+        keywordsToBridge: ["AI", "Prompt", "数据分析"]
+      },
+      { modelProvider: "gemini" }
+    );
+
+    expect(callModelJSON).toHaveBeenCalledOnce();
+    expect(suggestions[0]?.generationMode).toBe("deterministic_fallback");
+    expect(suggestions[0]?.modelProvider).toBe("deterministic_fallback");
+    expect(suggestions[0]?.modelFallbackReason).toContain("确定性回退");
+    expect(suggestions[0]?.reasonText).toContain("模型降级原因");
+  });
+
+  it("keeps quality warnings in reason text when the model echoes the original text", async () => {
+    callModelJSON.mockResolvedValue({
+      provider: "openai_compatible",
+      data: {
+        suggestions: [
+          {
+            section: "summary",
+            title: "个人优势",
+            before: "AI 产品实践者：正在独立设计 AI 求职辅助产品 OfferYou。",
+            after: "AI 产品实践者：正在独立设计 AI 求职辅助产品 OfferYou。",
+            reason: "沿用原始优势表述"
+          }
+        ]
+      }
+    });
+
+    const suggestions = await generateAISuggestions(
+      {
+        jdText: "招聘 AI 产品经理，要求 AI 产品设计、Prompt 迭代和数据分析。",
+        facts: [
+          {
+            text: "AI 产品实践者：正在独立设计 AI 求职辅助产品 OfferYou。",
+            section: "summary",
+            title: "个人优势",
+            sourceKind: "resume_baseline",
+            sourceLabel: "简历原文"
+          }
+        ],
+        gaps: [],
+        keywordsToBridge: ["AI", "Prompt", "数据分析"]
+      },
+      { modelProvider: "openai_compatible" }
+    );
+
+    expect(callModelJSON).toHaveBeenCalledOnce();
+    expect(suggestions[0]?.afterText).toBe("AI 产品实践者：正在独立设计 AI 求职辅助产品 OfferYou。");
+    expect(suggestions[0]?.reasonText).toContain("质量提示");
+    expect(suggestions[0]?.generationMode).toBe("model");
   });
 });

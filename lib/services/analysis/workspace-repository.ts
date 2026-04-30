@@ -56,6 +56,9 @@ export type PersistedWorkspaceDraft = {
     status: "pending" | "accepted" | "rejected";
     sourceKind: "resume_baseline" | "master_fact" | "target_role_fit" | "revision";
     sourceLabel: string;
+    generationMode?: "model" | "deterministic_fallback";
+    modelProvider?: "gemini" | "openai_compatible" | "deterministic_fallback";
+    modelFallbackReason?: string;
     parentSuggestionId?: string;
     revisionRound: number;
     userFeedbackType?: string;
