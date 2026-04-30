@@ -86,7 +86,7 @@ describe("ExportPdfButton", () => {
     });
   });
 
-  it("shows a page warning when the document is over two pages", () => {
+  it("still renders the export action without the old page-warning copy", () => {
     const sections = Array.from({ length: 25 }, (_, index) => ({
       id: `s${index + 1}`,
       title: `第 ${index + 1} 段`,
@@ -108,6 +108,7 @@ describe("ExportPdfButton", () => {
       />
     );
 
-    expect(screen.getByText("两页版本，建议保留重点")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "确认内容并导出 PDF" })).toHaveProperty("disabled", false);
+    expect(screen.queryByText("两页版本，建议保留重点")).toBeNull();
   });
 });

@@ -70,9 +70,8 @@ describe("applySuggestionAction", () => {
           reasonText: "Tie to the JD.",
           status: "pending",
           sourceKind: "master_fact",
-          sourceLabel: "Master fact: OfferYou founder block",
-          revisionRound: 0
-        }
+          sourceLabel: "Master fact: OfferYou founder block"
+        } as any
       ],
       factSubmissions: [],
       masterFactsUsed: []
@@ -98,6 +97,21 @@ describe("applySuggestionAction", () => {
     expect(result.childSuggestion!.revisionRound).toBe(1);
     expect(result.childSuggestion!.sourceKind).toBe("revision");
     expect(result.childSuggestion!.sourceLabel).toContain("Master fact");
+  });
+
+  it("defaults missing revisionRound to zero before incrementing", async () => {
+    const persisted = await readWorkspaceDraft("draft-1");
+    expect(persisted?.suggestions[0]?.revisionRound).toBeUndefined();
+
+    const result = await applySuggestionAction({
+      draftId: "draft-1",
+      action: "revise",
+      suggestionId: "s1",
+      feedbackType: "too_generic",
+      feedbackText: "Make the outcome sharper"
+    });
+
+    expect(result.childSuggestion!.revisionRound).toBe(1);
   });
 
   it("syncs the snapshot when a suggestion is accepted", async () => {
