@@ -7,6 +7,11 @@ export function normalizeOcrResumeText(text: string) {
   if (!text) return "";
   
   return text
+    // PDF browser headers/footers should never enter resume facts.
+    .replace(/^\s*\d{4}\/\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}.*简历\s*$/gmu, "")
+    .replace(/^\s*第\s*\d+\s*\/\s*\d+\s*页.*$/gmu, "")
+    .replace(/^\s*file:\/\/\/tmp\/resume[-\w./]*\.html\s*$/gmu, "")
+    .replace(/^#{1,6}\s+/gmu, "")
     // Intelligent OCR fix-ups for branding and common errors
     .replace(/\$O[&&]erYou\$/g, "OfferYou")
     .replace(/O["'""\u201c\u2018]\s*erYou/g, "OfferYou")
@@ -16,6 +21,8 @@ export function normalizeOcrResumeText(text: string) {
     .replace(/O\s*[&＆]\s*erYou/giu, "OfferYou")
     .replace(/O\s*"\s*erYou/g, "OfferYou")
     .replace(/OfferYou\s*\)/g, "OfferYou")
+    .replace(/\bOfferYou\s+AI/gu, "OfferYou AI")
+    .replace(/\s%+\s/g, " | ")
     // OCR: 「」Chinese book-title quotes misread as $...$  — run BEFORE bare $ stripping
     // Pattern: $some text$ where inner text is short and plausible (not a price)
     .replace(/\$([^\$\n]{1,80})\$/gu, (_, inner) => `「${inner}」`)
@@ -24,7 +31,6 @@ export function normalizeOcrResumeText(text: string) {
     .replace(/(?<=[\u4e00-\u9fa5A-Za-z\u2192→])\$/gu, "")
     // OCR: em-dash 「——」 sometimes produces stray - or — between arrows
     .replace(/(?<=→)\s*\$\s*(?=→)/gu, " → ")
-    .replace(/陕西怡阳/g, "陕西正大")
     // OCR: Remove isolated "junk" characters like stray asterisks, tildes, backticks, or underscores
     .replace(/(?<=^|\s)[*~`_\\^]{1,2}(?=\s|$)/g, "")
     // OCR: Clean up stray pipe characters or bullet points that are not separators

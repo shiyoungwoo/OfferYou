@@ -14,6 +14,18 @@ describe("text-cleaner", () => {
     );
   });
 
+  it("removes browser PDF headers and footers from parsed resume text", () => {
+    expect(
+      normalizeOcrResumeText(
+        [
+          "2026/3/11 00:26吴世阳 - AI产品经理简历",
+          "第2/2页file:///tmp/resume-ai-pm.html",
+          "运用 Excel 和 Tableau 搭建自动化预算分析模板"
+        ].join("\n")
+      )
+    ).toBe("运用 Excel 和 Tableau 搭建自动化预算分析模板");
+  });
+
   it("keeps generated resume structure after removing AI wrapper text", () => {
     expect(cleanGeneratedResumeText("建议在此经历中补充与岗位相关的具体动作或成果描述，以增强竞争力。\n项目 A")).toBe("项目 A");
   });

@@ -43,8 +43,9 @@ pnpm build
 
 ## 模型配置
 
-- Gemini：设置 `GEMINI_API_KEY`，可选设置 `GEMINI_MODEL`。
-- OpenAI 兼容模式：设置 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`。
+- 小米 MiMo：推荐设置 `MIMO_API_KEY`、`MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1`、`MIMO_MODEL=mimo-v2.5-pro`，并设置 `DEFAULT_MODEL_PROVIDER=openai_compatible`。
+- OpenAI 兼容模式：也支持 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`。
+- Gemini：仅作为可选旧接口，设置 `GEMINI_API_KEY`、可选设置 `GEMINI_MODEL` 后才会启用。
 - 都未配置时会自动使用 `deterministic_fallback`，用于本地验证和无 Key 场景。
 
 ## 模型能力说明

@@ -130,12 +130,16 @@ ${input.selectedCareerDirectionLabel ? `## Career Direction: ${input.selectedCar
 
 Resume rewrite rules:
 1. Provide ACTUAL CONTENT in the "after" field. Avoid phrases like "建议在此增加..." or "这段经历相关性较弱". Instead, write what the revised text should actually look like.
-2. For each suggestion, link it to a specific requirement in the JD. Explain the "Why" using JD keywords.
-3. If the JD requires a competency that the user has NOT mentioned, use the "reason" field to provide a clear "Gap Reminder" (缺失能力提醒) and tell them exactly what kind of fact or action they should add to this section to bridge the gap.
-4. Follow STAR principles (Situation, Task, Action, Result) for "after" text.
-5. If a candidate has low calibration confidence, do not fabricate a投递版 rewrite. Keep the description conservative and focus on structure confirmation.
-6. All output (title, after, reason) MUST be in Chinese (中文).
-7. Include candidateId when you can map a suggestion to a specific candidate.`;
+2. The "after" field must be COMPLETE. Never use "..." or "…" or unfinished sentences. Never output placeholders.
+3. The "after" field must show JD tailoring, not a copy of the original. Reorganize the source facts around 1-3 concrete JD requirements, such as AI workflow, content operations, product iteration, data analysis, collaboration, delivery, or learning ability when supported by source facts.
+4. For summary blocks, rewrite into 3-5 lines in this format: 能力维度：事实证据或结果.
+5. For work/project blocks, rewrite into the resume-ready structure: first line is title/company/project + role + time if available; then 2-4 concise bullets. Low-relevance blocks may keep only 1-2 lines, but still must be concrete.
+6. For each suggestion, link it to a specific requirement in the JD. Explain the "Why" using JD keywords.
+7. If the JD requires a competency that the user has NOT mentioned, use the "reason" field to provide a clear "Gap Reminder" (缺失能力提醒) and tell them exactly what kind of fact or action they should add to this section to bridge the gap.
+8. Follow STAR principles (Situation, Task, Action, Result) for "after" text.
+9. If a candidate has low calibration confidence, do not fabricate a投递版 rewrite. Keep the description conservative and focus on structure confirmation.
+10. All output (title, after, reason) MUST be in Chinese (中文).
+11. Include candidateId when you can map a suggestion to a specific candidate.`;
 
     const result = await callModelJSON<GeminiSuggestionResponse>({
       systemPrompt,
@@ -145,24 +149,26 @@ Resume rewrite rules:
     });
 
     if (result.data?.suggestions && Array.isArray(result.data.suggestions) && result.data.suggestions.length > 0) {
-      return result.data.suggestions.map((s, i) =>
-        reviewSuggestion(
-          {
-            id: `ai-${i + 1}`,
-            candidateId: s.candidateId,
-            section: s.section || "experience",
-            title: s.title || `AI Suggestion ${i + 1}`,
-            beforeText: s.before,
-            afterText: s.after,
-            reasonText: s.reason,
-            status: "pending" as const,
-            revisionRound: 0,
-            sourceKind: "resume_baseline" as const,
-            sourceLabel: "AI 改写建议"
-          },
-          input
-        )
-      );
+      return result.data.suggestions
+        .filter((s) => isRewritableSuggestionSection(s.section))
+        .map((s, i) =>
+          reviewSuggestion(
+            {
+              id: `ai-${i + 1}`,
+              candidateId: s.candidateId,
+              section: s.section || "experience",
+              title: s.title || `AI Suggestion ${i + 1}`,
+              beforeText: s.before,
+            afterText: normalizeModelSuggestionAfterText(s.after),
+              reasonText: s.reason,
+              status: "pending" as const,
+              revisionRound: 0,
+              sourceKind: "resume_baseline" as const,
+              sourceLabel: getAIRewriteSourceLabel(provider)
+            },
+            input
+          )
+        );
     }
   } catch {
     return generateSeedSuggestions(input);
@@ -191,6 +197,7 @@ export function generateSeedSuggestions(input: SuggestionSeedInput): SuggestionS
             selectedCareerDirectionLabel: input.selectedCareerDirectionLabel,
             sourceKind: fact.sourceKind,
           });
+      const cleanedAfter = normalizeModelSuggestionAfterText(rewrite.after);
 
       return reviewSuggestion(
         {
@@ -199,7 +206,7 @@ export function generateSeedSuggestions(input: SuggestionSeedInput): SuggestionS
           section: fact.section ?? "experience",
           title: fact.title ?? `改写建议 ${index + 1}`,
           beforeText: fact.text,
-          afterText: rewrite.after,
+          afterText: cleanedAfter,
           reasonText: rewrite.reason,
           status: "pending",
           revisionRound: 0,
@@ -296,6 +303,12 @@ function getDefaultSourceLabel(sourceKind?: SuggestionSeedInput["facts"][number]
   return "简历原文";
 }
 
+function getAIRewriteSourceLabel(provider: ModelProviderKey) {
+  if (provider === "openai_compatible") return "小米 MiMo 改写建议";
+  if (provider === "gemini") return "Gemini 改写建议";
+  return "AI 改写建议";
+}
+
 export function rewriteFactForJd(
   fact: string,
   jdText: string,
@@ -334,6 +347,17 @@ export function rewriteFactForJd(
   const baseReason = `保留原始事实中与「${focus}」相关的动作和结果，压缩空泛表达。；标签：${focus}；质量提升`;
 
   return { after: baseAfter, reason: baseReason };
+}
+
+function normalizeModelSuggestionAfterText(text: string) {
+  return cleanGeneratedResumeText(text)
+    .replace(/(?:\.{3}|…)+/gu, "")
+    .replace(/^可以改为[:：]\s*/u, "")
+    .replace(/^建议(?:改为|写成|调整为)[:：]?\s*/u, "")
+    .replace(/(?:建议补充|建议增加)[:：]?.*$/gmu, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 type DatedResumeEntry = {
@@ -406,7 +430,7 @@ function selectRelevantResumeLines(text: string, jdText: string, maxLines: numbe
     .map((line) => cleanGeneratedResumeText(line).replace(/^[-•]\s*/u, "").trim())
     .filter((line) => line.length >= 8)
     .map((line, index) => ({
-      line: shortenResumePhrase(line, 86),
+      line: shortenResumePhrase(line, 140),
       score: scoreFactRelevance(line, jdText) * 10 - index * 0.01
     }))
     .sort((left, right) => right.score - left.score);
@@ -479,13 +503,14 @@ function buildSuggestionCandidates(input: SuggestionSeedInput): SuggestionCandid
   if (input.calibratedResume?.entries?.length) {
     return input.calibratedResume.entries
       .map((entry) => calibratedEntryToSuggestionCandidate(entry))
-      .filter((fact) => fact.section !== "education")
+      .filter((fact) => isRewritableSuggestionSection(fact.section))
       .filter((fact) => isSubstantiveFactText(fact.text));
   }
 
   return input.facts
     .filter((fact) => fact.sourceKind !== "target_role_fit")
     .flatMap((fact) => splitFactIntoSuggestionCandidates(fact))
+    .filter((fact) => isRewritableSuggestionSection(fact.section))
     .filter((fact) => isSubstantiveFactText(fact.text));
 }
 
@@ -585,7 +610,16 @@ function classifyResumeHeading(line: string) {
     return { title: "教育背景", section: "education" };
   }
 
+  if (/^(技能与证书|技能证书|专业技能|技能|证书|语言能力|补充信息|其他信息)$/u.test(normalized)) {
+    return { title: "补充信息", section: "supplement" };
+  }
+
   return null;
+}
+
+function isRewritableSuggestionSection(section?: string) {
+  const normalized = (section ?? "").toLowerCase().replace(/\s+/g, "");
+  return !["education", "edu", "教育经历", "教育背景", "学历背景", "学习经历", "supplement", "skills", "skill", "certificate", "补充信息", "技能", "技能与证书", "证书"].includes(normalized);
 }
 
 function pushCurrentBlock(
@@ -632,5 +666,5 @@ function shortenResumePhrase(text: string, maxLength: number) {
     cleaned.lastIndexOf(" ", maxLength)
   );
   const end = cutAt >= Math.floor(maxLength * 0.55) ? cutAt : maxLength;
-  return `${cleaned.slice(0, end).replace(/[，；。\s]+$/u, "")}…`;
+  return cleaned.slice(0, end).replace(/[，；。\s]+$/u, "");
 }

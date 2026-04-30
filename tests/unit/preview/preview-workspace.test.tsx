@@ -1,7 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { PreviewWorkspace } from "@/components/preview/preview-workspace";
+import { getStableSquishLevel, PreviewWorkspace } from "@/components/preview/preview-workspace";
 
 vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>
@@ -31,7 +31,7 @@ describe("PreviewWorkspace", () => {
       />
     );
 
-    expect(screen.getAllByText("一页版，适合投递").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("button", { name: "确认内容并导出 PDF" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "编辑当前预览" }));
     fireEvent.click(screen.getByRole("button", { name: "新增条目" }));
 
@@ -79,5 +79,14 @@ describe("PreviewWorkspace", () => {
 
     expect(screen.getByText("手机：139 0000 0000")).toBeTruthy();
     expect(screen.getByText("邮箱：pm@example.com")).toBeTruthy();
+  });
+
+  it("keeps preview squish level stable near page-height thresholds", () => {
+    expect(getStableSquishLevel(1110, 0)).toBe(0);
+    expect(getStableSquishLevel(1130, 0)).toBe(1);
+    expect(getStableSquishLevel(1110, 1)).toBe(1);
+    expect(getStableSquishLevel(1040, 1)).toBe(1);
+    expect(getStableSquishLevel(1200, 2)).toBe(2);
+    expect(getStableSquishLevel(1170, 2)).toBe(2);
   });
 });

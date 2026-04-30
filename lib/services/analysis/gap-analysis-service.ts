@@ -109,7 +109,7 @@ export async function analyzeDraft(input: AnalysisInput): Promise<AnalysisResult
   const normalizedResponse = normalizeGeminiAnalysisResponse(response.data);
   const riskNotes = mergeRiskNotes(normalizedResponse.riskNotes, response.fallbackReason);
   const suggestions =
-    response.provider === "gemini"
+    response.provider !== "deterministic_fallback"
       ? await generateAISuggestions(
           {
             jdText: input.jdText,

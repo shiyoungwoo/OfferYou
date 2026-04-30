@@ -16,6 +16,9 @@ describe("model gateway", () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;
     delete process.env.OPENAI_MODEL;
+    delete process.env.MIMO_API_KEY;
+    delete process.env.MIMO_BASE_URL;
+    delete process.env.MIMO_MODEL;
   });
 
   it("lists gemini, OpenAI compatible, and deterministic fallback providers", async () => {

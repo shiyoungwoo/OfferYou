@@ -26,7 +26,7 @@ export async function calibrateResumeStructure(input: CalibrationInput): Promise
     };
   }
 
-  const parsed = calibratedResumeProfileSchema.safeParse(result.data);
+  const parsed = calibratedResumeProfileSchema.safeParse(normalizeModelCalibrationPayload(result.data));
   if (!parsed.success) {
     return {
       ...fallback,
@@ -41,10 +41,50 @@ export async function calibrateResumeStructure(input: CalibrationInput): Promise
   };
 }
 
+function normalizeModelCalibrationPayload(data: unknown) {
+  if (!isRecord(data)) return data;
+  if (!Array.isArray(data.entries)) return data;
+
+  return {
+    status: isCalibrationStatus(data.status) ? data.status : "needs_review",
+    personalInfo: isRecord(data.personalInfo) ? data.personalInfo : {},
+    entries: data.entries.map((entry, index) => normalizeModelCalibrationEntry(entry, index)),
+    unclassifiedText: Array.isArray(data.unclassifiedText) ? data.unclassifiedText.filter(isString) : [],
+    parseWarnings: Array.isArray(data.parseWarnings) ? data.parseWarnings.filter(isString) : [],
+    modelNotes: Array.isArray(data.modelNotes) ? data.modelNotes.filter(isString) : []
+  };
+}
+
+function normalizeModelCalibrationEntry(entry: unknown, index: number) {
+  const record = isRecord(entry) ? entry : {};
+  const bullets = Array.isArray(record.bullets)
+    ? record.bullets.filter(isString)
+    : typeof record.bullets === "string"
+      ? splitBullets(record.bullets)
+      : [];
+  const title = isString(record.title) && record.title.trim() ? record.title.trim() : `简历条目 ${index + 1}`;
+  const sourceText = isString(record.sourceText) && record.sourceText.trim()
+    ? record.sourceText.trim()
+    : [title, record.dateRange, ...bullets].filter(isString).join("\n");
+
+  return {
+    id: isString(record.id) && record.id.trim() ? record.id.trim() : randomUUID(),
+    section: isResumeSection(record.section) ? record.section : "other",
+    title,
+    organization: isString(record.organization) ? record.organization : undefined,
+    role: isString(record.role) ? record.role : undefined,
+    dateRange: isString(record.dateRange) ? record.dateRange : undefined,
+    bullets,
+    sourceText,
+    confidence: isConfidence(record.confidence) ? record.confidence : "medium",
+    issues: Array.isArray(record.issues) ? record.issues.filter(isString) : []
+  };
+}
+
 export function calibrateResumeStructureDeterministic(input: CalibrationInput): CalibratedResumeProfile {
   const lines = input.resumeText
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line) => normalizeResumeLine(line))
     .filter(Boolean);
 
   const personalInfo = extractPersonalInfo(lines);
@@ -124,7 +164,7 @@ export function calibrateResumeStructureDeterministic(input: CalibrationInput): 
 function extractPersonalInfo(lines: string[]) {
   const text = lines.slice(0, 8).join(" ");
   return {
-    name: lines.find((line) => /^[\u4e00-\u9fa5·]{2,8}$/.test(line)),
+    name: normalizeChineseName(lines.find((line) => /^[\u4e00-\u9fa5·\s]{2,12}$/.test(line))),
     phone: text.match(/1[3-9]\d{9}/)?.[0],
     email: text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0],
     location: text.match(/(?:所在地|居住地|城市)[:：]?\s*([^|｜\s]+)/u)?.[1],
@@ -134,7 +174,7 @@ function extractPersonalInfo(lines: string[]) {
 }
 
 function detectSectionHeading(line: string): ResumeEntrySection | null {
-  const compact = line.replace(/\s+/g, "");
+  const compact = line.replace(/^#{1,6}\s*/u, "").replace(/\s+/g, "");
   if (/^(个人优势|自我评价|个人总结|核心优势)$/u.test(compact)) return "summary";
   if (/^(工作经历|工作经验|职业经历|任职经历|实习经历)$/u.test(compact)) return "work";
   if (/^(项目经历|项目经验|个人项目|代表项目)$/u.test(compact)) return "project";
@@ -145,6 +185,23 @@ function detectSectionHeading(line: string): ResumeEntrySection | null {
 
 function looksLikeEntryTitle(line: string) {
   return Boolean(extractDateRange(line)) || /(大学|学院|公司|项目|产品|经理|负责人|实习|本科|硕士|博士|技能|证书|英语|CET|雅思|托福)/iu.test(line);
+}
+
+function normalizeResumeLine(line: string) {
+  return line
+    .trim()
+    .replace(/^#{1,6}\s*/u, "")
+    .replace(/\s%+\s/u, " | ")
+    .replace(/\$O[&＆]erYou\$/gu, "OfferYou")
+    .replace(/O["'""\u201c\u2018]\s*erYou/gu, "OfferYou")
+    .replace(/OfferYou\s*\)/gu, "OfferYou")
+    .trim();
+}
+
+function normalizeChineseName(name?: string) {
+  if (!name) return undefined;
+  const compact = name.replace(/\s+/g, "");
+  return /^[\u4e00-\u9fa5·]{2,8}$/u.test(compact) ? compact : undefined;
 }
 
 function extractDateRange(line: string) {
@@ -163,8 +220,13 @@ function collectParseWarnings(lines: string[]) {
 }
 
 function isPersonalInfoLine(line: string, info: ReturnType<typeof extractPersonalInfo>) {
+  if (/^求职意向[:：]/u.test(line)) {
+    return true;
+  }
+
   const values = [info.name, info.phone, info.email, info.location, info.github, info.portfolio].filter(Boolean) as string[];
-  return values.some((value) => line.includes(value));
+  const compactLine = line.replace(/\s+/g, "");
+  return values.some((value) => line.includes(value) || compactLine.includes(value.replace(/\s+/g, "")));
 }
 
 function buildCalibrationSystemPrompt() {
@@ -179,4 +241,31 @@ function buildCalibrationSystemPrompt() {
 
 function buildCalibrationUserPrompt(resumeText: string) {
   return `请校准以下简历解析文本，恢复为结构化简历。\n\n${resumeText}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isCalibrationStatus(value: unknown): value is CalibratedResumeProfile["status"] {
+  return value === "pending" || value === "needs_review" || value === "confirmed";
+}
+
+function isResumeSection(value: unknown): value is ResumeEntrySection {
+  return value === "summary" || value === "work" || value === "project" || value === "education" || value === "supplement" || value === "other";
+}
+
+function isConfidence(value: unknown): value is CalibratedResumeEntry["confidence"] {
+  return value === "high" || value === "medium" || value === "low";
+}
+
+function splitBullets(value: string) {
+  return value
+    .split(/\r?\n|[；;]/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
 }

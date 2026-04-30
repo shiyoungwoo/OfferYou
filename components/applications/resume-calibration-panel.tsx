@@ -49,9 +49,9 @@ export function ResumeCalibrationPanel({ calibratedResume }: ResumeCalibrationPa
         <div className="rounded-[1.2rem] border border-line bg-paper px-4 py-4">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">模型说明</p>
           <p className="mt-3 text-sm leading-6 text-slate-700">
-            当前结构来自 {calibratedResume.modelProvider === "gemini" ? "Gemini" : calibratedResume.modelProvider === "openai_compatible" ? "文本模型" : "确定性兜底"}。
+            当前结构来自 {getCalibrationSourceLabel(calibratedResume.modelProvider)}。
           </p>
-          <p className="mt-3 text-sm leading-6 text-slate-700">{calibratedResume.modelNotes.join(" ")}</p>
+          <p className="mt-3 text-sm leading-6 text-slate-700">{getCalibrationNote(calibratedResume)}</p>
         </div>
       </div>
 
@@ -106,4 +106,22 @@ function InfoLine({ label, value }: { label: string; value?: string }) {
       {value || "未填写"}
     </p>
   );
+}
+
+function getCalibrationSourceLabel(provider?: string) {
+  if (provider === "gemini") return "Gemini 多模态校准";
+  if (provider === "openai_compatible") return "小米 MiMo 文本校准";
+  return "OpenDataLoader PDF 解析 + 结构规则校准";
+}
+
+function getCalibrationNote(calibratedResume: CalibratedResumeProfile) {
+  if (calibratedResume.status === "confirmed") {
+    return "姓名、联系方式和主要经历模块已恢复，可继续查看岗位改写建议。";
+  }
+
+  if (calibratedResume.modelProvider === "openai_compatible") {
+    return calibratedResume.modelNotes.join(" ") || "已完成文本模型校准，请核对低置信字段。";
+  }
+
+  return "部分字段仍需人工确认；确认前不会直接进入最终投递稿。";
 }

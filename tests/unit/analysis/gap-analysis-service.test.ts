@@ -1,7 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { analyzeDraft } from "@/lib/services/analysis/gap-analysis-service";
 
 describe("analyzeDraft", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    delete process.env.MIMO_API_KEY;
+    delete process.env.MIMO_BASE_URL;
+    delete process.env.MIMO_MODEL;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_BASE_URL;
+    delete process.env.OPENAI_MODEL;
+    delete process.env.GEMINI_API_KEY;
+  });
+
   it("returns strengths, gaps, and fit score", async () => {
     const result = await analyzeDraft({
       jdText: "Need AI product management and workflow design with user impact and metrics.",
@@ -51,6 +63,73 @@ describe("analyzeDraft", () => {
 
     expect(result.suggestions[0]?.beforeText).toContain("OfferYou AI 岗位定制简历助手");
     expect(result.suggestions[0]?.candidateId).toBe("cal-1");
+  });
+
+  it("uses OpenAI-compatible providers for AI rewrite suggestions instead of seed fallback", async () => {
+    process.env.MIMO_API_KEY = "mimo-key";
+    process.env.MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
+    process.env.MIMO_MODEL = "mimo-v2.5-pro";
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  fitScore: 82,
+                  strengths: ["具备 AI 产品实践经验"],
+                  gaps: ["需要更突出新媒体 AI 化运营"],
+                  keywordsToBridge: ["AI 工作流", "Prompt Engineering"],
+                  riskNotes: []
+                })
+              }
+            }
+          ]
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  suggestions: [
+                    {
+                      section: "project",
+                      title: "OfferYou 项目岗位化改写",
+                      before: "独立完成产品定义与 MVP 范围收敛。",
+                      after: "OfferYou AI 岗位定制简历助手：围绕 AI 产品经理岗位，完成 JD 解析、Prompt 改写、简历快照与导出链路设计，并用真实求职场景验证产品流程。",
+                      reason: "对应 JD 中 AI 工作流和 Prompt Engineering 要求。"
+                    }
+                  ]
+                })
+              }
+            }
+          ]
+        })
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await analyzeDraft({
+      jdText: "AI 产品经理要求 AI 工作流优化、Prompt Engineering 和新媒体 AI 化运营。",
+      facts: [
+        {
+          text: "独立完成产品定义与 MVP 范围收敛。",
+          section: "project",
+          sourceKind: "resume_baseline",
+          sourceLabel: "简历原文"
+        }
+      ]
+    });
+
+    expect(result.suggestions[0]?.id).toBe("ai-1");
+    expect(result.suggestions[0]?.sourceLabel).toBe("小米 MiMo 改写建议");
+    expect(result.suggestions[0]?.afterText).toContain("Prompt 改写");
+    expect(result.suggestions[0]?.afterText).not.toBe(result.suggestions[0]?.beforeText);
   });
 
   it("switches into talent-amplified optimization when a strengths profile exists", async () => {

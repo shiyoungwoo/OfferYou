@@ -1,7 +1,9 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { runCommand } from "@/lib/services/ingestion/command-runner";
+import { normalizeOcrResumeText } from "@/lib/services/analysis/text-cleaner";
 
 type UploadTextInput = {
   buffer: Buffer;
@@ -47,7 +49,7 @@ export async function extractTextFromStoredAsset(input: {
 
     return extractedText
       ? {
-          extractedText,
+          extractedText: normalizeOcrResumeText(extractedText),
           extractionState: "full_text"
         }
       : {
@@ -61,7 +63,7 @@ export async function extractTextFromStoredAsset(input: {
 
     return extractedText
       ? {
-          extractedText,
+          extractedText: normalizeOcrResumeText(extractedText),
           extractionState: "partial_text"
         }
       : {
@@ -84,7 +86,7 @@ export async function extractTextFromUploadedBuffer(input: UploadTextInput): Pro
 
   if (normalizedMimeType.startsWith("text/") || filename.endsWith(".txt") || filename.endsWith(".md")) {
     return {
-      extractedText: input.buffer.toString("utf8").trim(),
+      extractedText: normalizeOcrResumeText(input.buffer.toString("utf8")),
       extractionState: "full_text"
     };
   }
@@ -136,7 +138,7 @@ async function extractPdfTextFromBuffer(buffer: Buffer, filename: string): Promi
     const fallbackText = extractPdfTextRawFallback(buffer);
     if (fallbackText && !isGibberish(fallbackText)) {
       return {
-        extractedText: fallbackText,
+        extractedText: normalizeOcrResumeText(fallbackText),
         extractionState: "partial_text"
       };
     }
@@ -161,7 +163,7 @@ async function extractPdfTextFromBuffer(buffer: Buffer, filename: string): Promi
         console.log(`[OfferYou] pdf-parse extracted ${text.length} chars from ${data.numpages} pages`);
       }
       return {
-        extractedText: text,
+        extractedText: normalizeOcrResumeText(text),
         extractionState: "full_text"
       };
     }
@@ -172,7 +174,7 @@ async function extractPdfTextFromBuffer(buffer: Buffer, filename: string): Promi
   const fallbackText = extractPdfTextRawFallback(buffer);
   if (fallbackText && !isGibberish(fallbackText)) {
     return {
-      extractedText: fallbackText,
+      extractedText: normalizeOcrResumeText(fallbackText),
       extractionState: "partial_text"
     };
   }
@@ -187,7 +189,14 @@ async function extractPdfTextWithOpenDataLoader(buffer: Buffer, filename: string
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "offeryou-opendataloader-"));
   const inputPath = path.join(tempDir, path.basename(filename || "document.pdf"));
   const outputDir = path.join(tempDir, "output");
-  const venvPath = path.join(process.cwd(), ".venv", "bin", "opendataloader-pdf");
+  const cliPath = resolveOpenDataLoaderCliPath();
+
+  if (!cliPath) {
+    if (process.env.OFFERYOU_DEBUG_INGESTION === "1") {
+      console.error("[OfferYou] OpenDataLoader CLI is unavailable.");
+    }
+    return null;
+  }
 
   try {
     await mkdir(outputDir, { recursive: true });
@@ -209,7 +218,7 @@ async function extractPdfTextWithOpenDataLoader(buffer: Buffer, filename: string
       args.push("--hybrid-fallback");
     }
 
-    await runCommand(venvPath, args, {
+    await runCommand(cliPath, args, {
       timeout: 120_000, // Hybrid mode might need more time
       maxBuffer: 10 * 1024 * 1024
     });
@@ -219,7 +228,7 @@ async function extractPdfTextWithOpenDataLoader(buffer: Buffer, filename: string
       return null;
     }
 
-    const extractedText = (await readFile(extractedFile, "utf-8")).trim();
+    const extractedText = normalizeOcrResumeText(await readFile(extractedFile, "utf-8"));
     if (!extractedText) {
       return null;
     }
@@ -236,6 +245,24 @@ async function extractPdfTextWithOpenDataLoader(buffer: Buffer, filename: string
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+function resolveOpenDataLoaderCliPath() {
+  const candidates = [
+    process.env.OFFERYOU_OPENDATALOADER_PDF,
+    path.join(process.cwd(), ".venv", "bin", "opendataloader-pdf"),
+    // Local rescue path for the current OfferYou worktree split. Prefer env/repo-local paths above.
+    "/tmp/superpowers/worktrees/OfferYou/phase3-batch28/.venv/bin/opendataloader-pdf",
+    "opendataloader-pdf"
+  ].filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    if (candidate === "opendataloader-pdf" || existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 async function findFirstTextOutputFile(rootDir: string): Promise<string | null> {

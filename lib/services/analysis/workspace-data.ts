@@ -74,6 +74,15 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
   const persisted = await readWorkspaceDraft(draftId);
 
   if (persisted) {
+    const calibratedSummaryText = persisted.calibratedResume
+      ? persisted.calibratedResume.entries
+          .filter((entry) => entry.section === "summary")
+          .map((entry) => entry.sourceText || [entry.title, ...(entry.bullets ?? [])].join("\n"))
+          .map((text) => normalizeOcrResumeText(text))
+          .filter(Boolean)
+          .join("\n")
+      : "";
+
     return {
       company: persisted.company,
       jobTitle: persisted.jobTitle,
@@ -84,7 +93,10 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
       calibratedResume: persisted.calibratedResume,
       masterFactsUsed: persisted.masterFactsUsed ?? [],
       suggestions: persisted.suggestions.map(s => {
-        const cleanedBefore = normalizeOcrResumeText(s.beforeText);
+        const cleanedBefore =
+          s.section === "summary" && calibratedSummaryText
+            ? calibratedSummaryText
+            : normalizeOcrResumeText(s.beforeText);
         
         // Detect stale generic fallback text and repair it on the fly
         if (s.afterText.includes("相关性较弱") && s.afterText.includes("仅保留时间及岗位")) {

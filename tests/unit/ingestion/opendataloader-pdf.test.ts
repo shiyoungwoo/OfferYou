@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/services/ingestion/command-runner", () => ({
   runCommand: vi.fn(async (command: string, args: string[]) => {
-    if (command !== "opendataloader-pdf") {
+    if (!command.endsWith("opendataloader-pdf")) {
       return { stdout: "", stderr: "" };
     }
 

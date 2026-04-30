@@ -72,13 +72,9 @@ export function renderResumeDocumentHtml(document: ResumeDocument) {
   const body = `
       <article>
         <header class="resume-header">
-          <div class="header-copy">
-            <div class="header-main">
-              <h2>${escapeHtml(document.header.name)}</h2>
-              <span class="role">${escapeHtml(document.header.title)}</span>
-            </div>
-            ${headerInfo.length > 0 ? `<div class="contact-bar">${headerInfo.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
-          </div>
+          <h2>${escapeHtml(document.header.name)}</h2>
+          ${headerInfo.length > 0 ? `<div class="contact-bar">${headerInfo.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
+          ${document.header.title ? `<div class="role">求职意向：${escapeHtml(document.header.title)}</div>` : ""}
         </header>
         <div class="resume-sections">${sections}</div>
       </article>`;
@@ -91,7 +87,7 @@ export function renderResumeDocumentHtml(document: ResumeDocument) {
     <title>${escapeHtml(document.header.name)}</title>
     <style>
       :root {
-        --main-blue: #2F5ED7;
+        --main-blue: #1E3A70;
         --text-dark: #1F2430;
         --text-gray: #5B6472;
         --divider-blue: #D9E2F2;
@@ -123,41 +119,34 @@ export function renderResumeDocumentHtml(document: ResumeDocument) {
 
       /* ── Header ── */
       .resume-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 18px;
         padding-bottom: 7px;
         border-bottom: 2px solid var(--text-dark);
         margin-bottom: 10px;
-      }
-      .header-copy {
-        min-width: 0;
-        flex: 1;
-      }
-      .header-main {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
+        text-align: center;
       }
       h2 {
-        font-size: 20.5pt;
+        font-size: 24pt;
         font-weight: 800;
-        line-height: 1.1;
+        line-height: 1;
         color: var(--text-dark);
-        letter-spacing: 0.02em;
+        letter-spacing: 0.08em;
       }
       .role {
-        font-size: 11pt;
-        font-weight: 500;
-        color: var(--text-dark);
+        width: fit-content;
+        margin: 8px auto 0 auto;
+        padding: 0 30px 4px 30px;
+        border-bottom: 2px solid var(--main-blue);
+        font-size: 13pt;
+        font-weight: 700;
+        color: var(--main-blue);
       }
       .contact-bar {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
+        justify-content: center;
         gap: 0 8px;
-        margin-top: 5px;
+        margin-top: 7px;
         font-size: 8.8pt;
         line-height: 1.3;
         color: var(--text-gray);
@@ -212,9 +201,21 @@ export function renderResumeDocumentHtml(document: ResumeDocument) {
 
       /* ── Text items ── */
       .text-item {
+        position: relative;
+        padding-left: 12px;
         font-size: 9.2pt;
         line-height: 1.38;
         color: var(--text-dark);
+      }
+      .text-item::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.62em;
+        width: 4px;
+        height: 4px;
+        border-radius: 999px;
+        background: var(--text-gray);
       }
 
       /* ── Entry items ── */
@@ -266,6 +267,7 @@ export function renderResumeDocumentHtml(document: ResumeDocument) {
         display: flex;
         flex-direction: column;
         gap: 1px;
+        list-style: disc;
       }
       .entry-bullets li {
         font-size: 9.1pt;
@@ -324,7 +326,7 @@ function renderSection(section: ResumeDocumentSection) {
                     </div>
                     ${item.meta ? `<span class="entry-meta">${escapeHtml(item.meta)}</span>` : ""}
                   </div>
-                  ${item.summary ? `<div class="entry-summary">${escapeHtml(item.summary)}</div>` : ""}
+                  ${item.summary ? `<ul class="entry-bullets"><li>${escapeHtml(item.summary)}</li></ul>` : ""}
                   ${
                     item.bullets && item.bullets.length > 0
                       ? `<ul class="entry-bullets">${item.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>`
@@ -364,6 +366,7 @@ export function getHeaderInfo(document: ResumeDocument) {
       .filter(Boolean)
       .filter((line) => !/^姓名[：:]/u.test(line))
       .filter((line) => !/^求职意向[：:]/u.test(line))
+      .filter((line) => !isEmptyHeaderInfoLine(line))
   ).slice(0, 7);
 }
 
@@ -380,6 +383,16 @@ function joinHeaderEntry(heading: string, subheading?: string) {
 
 function dedupe(values: string[]) {
   return Array.from(new Set(values));
+}
+
+function isEmptyHeaderInfoLine(line: string) {
+  const normalized = line.replace(/\s+/g, "").toLowerCase();
+  const value = normalized.includes("：") ? normalized.split("：").slice(1).join("：") : normalized;
+
+  return (
+    /未填写|待补|待填写|可选|暂无|无$|^-$/u.test(value) ||
+    /^(github|git|作品集|居住地|所在地|邮箱|手机|电话|学历)：?(未填写|待补|待填写|可选|暂无|无|-)?$/u.test(normalized)
+  );
 }
 
 function isRenderableItem(item: ResumeDocumentSection["items"][number]) {

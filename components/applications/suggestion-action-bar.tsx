@@ -17,6 +17,7 @@ type SuggestionActionBarProps = {
   };
   localOnly?: boolean;
   compact?: boolean;
+  confirmOnly?: boolean;
 };
 
 export function SuggestionActionBar({
@@ -30,7 +31,8 @@ export function SuggestionActionBar({
   onReject,
   actionPayload,
   localOnly = false,
-  compact = false
+  compact = false,
+  confirmOnly = false
 }: SuggestionActionBarProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -90,24 +92,28 @@ export function SuggestionActionBar({
         >
           编辑
         </button>
-        <button
-          className={`rounded-lg border px-2 py-1 text-[11px] font-bold transition-colors ${
-            currentStatus === "rejected"
-              ? "border-rose-200 bg-rose-50 text-rose-600"
-              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-          }`}
-          disabled={isPending}
-          onClick={(e) => runSimpleAction("reject", e)}
-        >
-          {currentStatus === "rejected" ? "已拒绝" : "拒绝"}
-        </button>
-        <button
-          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-50"
-          disabled={isPending}
-          onClick={(e) => { e.stopPropagation(); onRevise(); }}
-        >
-          微调
-        </button>
+        {!confirmOnly && (
+          <>
+            <button
+              className={`rounded-lg border px-2 py-1 text-[11px] font-bold transition-colors ${
+                currentStatus === "rejected"
+                  ? "border-rose-200 bg-rose-50 text-rose-600"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+              disabled={isPending}
+              onClick={(e) => runSimpleAction("reject", e)}
+            >
+              {currentStatus === "rejected" ? "已拒绝" : "拒绝"}
+            </button>
+            <button
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-50"
+              disabled={isPending}
+              onClick={(e) => { e.stopPropagation(); onRevise(); }}
+            >
+              微调
+            </button>
+          </>
+        )}
       </div>
     );
   }
@@ -134,26 +140,30 @@ export function SuggestionActionBar({
       >
         编辑
       </button>
-      <button
-        className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
-          currentStatus === "rejected"
-            ? "border-rose-200 bg-rose-50 text-rose-600"
-            : "border-line bg-white text-slate-700 disabled:opacity-60"
-        }`}
-        disabled={isPending}
-        onClick={(e) => runSimpleAction("reject", e)}
-        type="button"
-      >
-        {currentStatus === "rejected" ? "已拒绝建议" : "拒绝"}
-      </button>
-      <button
-        className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
-        disabled={isPending}
-        onClick={(e) => { e.stopPropagation(); onRevise(); }}
-        type="button"
-      >
-        继续微调
-      </button>
+      {!confirmOnly && (
+        <>
+          <button
+            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+              currentStatus === "rejected"
+                ? "border-rose-200 bg-rose-50 text-rose-600"
+                : "border-line bg-white text-slate-700 disabled:opacity-60"
+            }`}
+            disabled={isPending}
+            onClick={(e) => runSimpleAction("reject", e)}
+            type="button"
+          >
+            {currentStatus === "rejected" ? "已拒绝建议" : "拒绝"}
+          </button>
+          <button
+            className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+            disabled={isPending}
+            onClick={(e) => { e.stopPropagation(); onRevise(); }}
+            type="button"
+          >
+            继续微调
+          </button>
+        </>
+      )}
     </div>
   );
 }

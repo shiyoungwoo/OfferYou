@@ -1,5 +1,6 @@
 import React from "react";
 import type { ResumeDocument } from "@/lib/document/resume-document";
+import { getContentSections, getHeaderInfo, getRenderableSections } from "@/lib/services/export/preview-renderer";
 
 type TemplateATSCleanProps = {
   document: ResumeDocument;
@@ -7,28 +8,28 @@ type TemplateATSCleanProps = {
 
 export function TemplateATSClean({ document }: TemplateATSCleanProps) {
   const headerInfo = getHeaderInfo(document);
-  const contentSections = document.sections.filter((section) => section.id !== "personal-info");
+  const contentSections = getContentSections(getRenderableSections(document.sections));
 
   return (
     <div className="flex flex-col text-slate-900">
-      <header className="resume-header flex items-start gap-5 border-b-2 border-slate-800 pb-2">
+      <header className="resume-header grid grid-cols-[minmax(190px,0.45fr)_minmax(500px,1fr)] gap-6 border-b-2 border-slate-800 pb-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-3">
-            <h2 className="text-[26px] font-extrabold leading-none tracking-[0.04em]">{document.header.name}</h2>
-            <span className="text-[14px] font-semibold text-slate-600 whitespace-nowrap">
+          <h2 className="text-[29px] font-extrabold leading-none tracking-[0.04em]">{document.header.name}</h2>
+          {document.header.title ? (
+            <div className="mt-4 w-fit border-b border-slate-300 pb-1 pr-16 text-[20px] font-bold leading-tight text-slate-700">
               {document.header.title}
-            </span>
-          </div>
-          {headerInfo.length > 0 ? (
-            <div className="contact-line mt-2 flex flex-wrap items-center gap-x-3 text-[10.5px] leading-snug text-slate-500">
-              {headerInfo.map((item) => (
-                <span key={item} className="after:ml-3 after:text-slate-300 after:font-light after:content-['|'] last:after:content-none whitespace-nowrap">
-                  {item}
-                </span>
-              ))}
             </div>
           ) : null}
         </div>
+        {headerInfo.length > 0 ? (
+          <div className="contact-line grid min-w-0 grid-cols-2 content-start justify-items-start gap-x-5 gap-y-1.5 border-l border-slate-300 pl-5 pt-1 text-left text-[10px] leading-snug text-slate-600">
+            {headerInfo.map((item) => (
+              <span key={item} className="max-w-full whitespace-nowrap">
+                {item}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </header>
 
       <div className="flex flex-col mt-3">
@@ -38,7 +39,7 @@ export function TemplateATSClean({ document }: TemplateATSCleanProps) {
             className={`resume-section break-inside-avoid py-1.5 ${sectionIndex === 0 ? "" : "border-t border-slate-200"}`}
           >
             <h3 className="text-[13px] font-bold uppercase tracking-[0.12em] text-slate-600 mb-1.5">{section.title}</h3>
-            <div className="resume-section-items flex flex-col gap-1.5">
+            <div className="resume-section-items flex flex-col gap-1">
               {section.items.map((item, index) => (
                 <div key={`${section.id}-${index}`}>
                   {item.type === "entry" ? (
@@ -57,20 +58,21 @@ export function TemplateATSClean({ document }: TemplateATSCleanProps) {
 }
 
 function ResumeEntry({ item }: { item: ResumeDocument["sections"][number]["items"][number] & { type: "entry" } }) {
+  const detailItems = [item.summary, ...(item.bullets ?? [])].filter(Boolean);
+
   return (
     <div className="entry flex flex-col gap-0.5">
       <div className="entry-head flex items-baseline justify-between gap-3">
-        <div>
-          <p className="entry-title text-[13px] font-bold text-slate-900">{item.heading}</p>
-          {item.subheading ? <p className="entry-subtitle text-[11.5px] text-slate-500 mt-0.5">{item.subheading}</p> : null}
+        <div className="min-w-0 flex items-baseline gap-1.5">
+          <span className="entry-title text-[13px] font-bold text-slate-900">{item.heading}</span>
+          {item.subheading ? <span className="entry-subtitle text-[11.5px] text-slate-500">｜ {item.subheading}</span> : null}
         </div>
         {item.meta ? <p className="entry-meta shrink-0 text-[11.5px] font-medium text-slate-500 whitespace-nowrap">{item.meta}</p> : null}
       </div>
-      {item.summary ? <p className="entry-summary text-[12px] leading-[1.5] text-slate-600 mt-0.5">{item.summary}</p> : null}
-      {item.bullets && item.bullets.length > 0 ? (
-        <ul className="entry-bullets mt-0.5 flex flex-col gap-px pl-4 text-[11.5px] leading-[1.45] text-slate-600">
-          {item.bullets.map((bullet) => (
-            <li key={bullet} className="list-disc marker:text-slate-400">
+      {detailItems.length > 0 ? (
+        <ul className="entry-bullets mt-0.5 flex list-disc flex-col gap-px pl-3.5 text-[11.5px] leading-[1.42] text-slate-600 marker:text-slate-400">
+          {detailItems.map((bullet) => (
+            <li key={bullet}>
               {bullet}
             </li>
           ))}
@@ -78,33 +80,4 @@ function ResumeEntry({ item }: { item: ResumeDocument["sections"][number]["items
       ) : null}
     </div>
   );
-}
-
-function getHeaderInfo(document: ResumeDocument) {
-  const personalInfo = document.sections.find((section) => section.id === "personal-info");
-  const lines =
-    personalInfo?.items.flatMap((item) =>
-      item.type === "text" ? splitPersonalInfoLine(item.text) : [joinHeaderEntry(item.heading, item.subheading)]
-    ) ?? document.header.contacts ?? [];
-
-  return Array.from(
-    new Set(
-      lines
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .filter((line) => !/^姓名[：:]/u.test(line))
-        .filter((line) => !/^求职意向[：:]/u.test(line))
-    )
-  ).slice(0, 7);
-}
-
-function splitPersonalInfoLine(text: string) {
-  return text
-    .split(/[｜|]/u)
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
-function joinHeaderEntry(heading: string, subheading?: string) {
-  return [heading, subheading].filter(Boolean).join("：");
 }

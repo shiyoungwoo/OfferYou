@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { TemplateProfessionalCN } from "@/components/preview/template-professional-cn";
-import { buildResumePdfFilename, estimateResumePageCount, getResumePageWaterLabel } from "@/lib/services/export/preview-renderer";
+import { buildResumePdfFilename, estimateResumePageCount, getHeaderInfo, getResumePageWaterLabel } from "@/lib/services/export/preview-renderer";
 
 describe("TemplateProfessionalCN", () => {
   it("renders section headings from ResumeDocument", () => {
@@ -59,5 +59,30 @@ describe("TemplateProfessionalCN", () => {
     expect(buildResumePdfFilename(document)).toMatch(/^王小明-AI 产品经理-可投递版-\d{8}\.pdf$/u);
     expect(estimateResumePageCount(document)).toBe(1);
     expect(getResumePageWaterLabel(3)).toBe("建议删减后再导出");
+  });
+
+  it("omits empty optional header fields", () => {
+    const document = {
+      templateKey: "professional-cn" as const,
+      header: {
+        name: "王小明",
+        title: "AI 产品经理",
+        meta: []
+      },
+      sections: [
+        {
+          id: "personal-info",
+          title: "个人信息",
+          items: [
+            { type: "text" as const, text: "手机：13800000000" },
+            { type: "text" as const, text: "GitHub：未填写" },
+            { type: "text" as const, text: "作品集：可选" },
+            { type: "text" as const, text: "英语：CET-6" }
+          ]
+        }
+      ]
+    };
+
+    expect(getHeaderInfo(document)).toEqual(["手机：13800000000", "英语：CET-6"]);
   });
 });

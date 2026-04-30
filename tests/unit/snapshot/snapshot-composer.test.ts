@@ -342,6 +342,8 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
     );
     expect(JSON.stringify(document.sections.find((section) => section.id === "work-experience")?.items)).toContain("广发银行北京分行");
     expect(JSON.stringify(document.sections.find((section) => section.id === "work-experience")?.items)).toContain("B 端客户");
+    expect(JSON.stringify(document.sections)).not.toContain("file:///tmp/resume-ai-pm.html");
+    expect(JSON.stringify(document.sections)).not.toContain("2026/3/11");
     expect(JSON.stringify(document.sections.find((section) => section.id === "project-experience")?.items)).toContain("OfferYou");
     expect(JSON.stringify(document.sections.find((section) => section.id === "project-experience")?.items)).toContain("Prompt 迭代");
     expect(document.sections.find((section) => section.id === "education")?.items[0]).toMatchObject({
@@ -349,5 +351,60 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
       heading: "对外经济贸易大学",
       meta: "2020-2022"
     });
+  });
+
+  it("prefers accepted work suggestions over the same raw parsed work entry", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-6",
+      userId: "default-user",
+      company: "图灵文化",
+      jobTitle: "AI 产品经理",
+      language: "zh",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "要求 AI 工作流优化、新媒体 AI 化运营、Prompt Engineering、学习落地能力。",
+      jdAsset: {
+        storagePath: "/tmp/jd.txt",
+        mimeType: "text/plain",
+        originalFilename: "jd.txt"
+      },
+      resumeExtractedText: [
+        "工作经历",
+        "广发银行北京分行 综合柜员岗 2022.08 - 2025.08",
+        "流程优化与数据分析：协助网点负责人进行运营数据统计与分析",
+        "培训体系搭建：担任业务导师，带教新员工掌握核心操作系统"
+      ].join("\n"),
+      analysis: {
+        fitScore: 70,
+        optimizationMode: "baseline_jd_match",
+        strengths: [],
+        gaps: [],
+        riskNotes: []
+      },
+      suggestions: [
+        {
+          id: "s-work",
+          section: "experience",
+          title: "广发银行经历改写",
+          beforeText: "广发银行北京分行 综合柜员岗 2022.08 - 2025.08",
+          afterText: [
+            "广发银行北京分行｜综合柜员岗｜2022.08 - 2025.08",
+            "- 结合网点运营数据进行统计与分析，识别业务量波动并为排班和窗口调整提供依据。",
+            "- 梳理高频业务流程和操作要点，带教新员工掌握核心系统，沉淀可复用的培训材料。"
+          ].join("\n"),
+          reasonText: "贴合 JD 对流程优化、数据分析和学习落地能力的要求。",
+          status: "accepted",
+          sourceKind: "resume_baseline",
+          sourceLabel: "AI 改写建议",
+          revisionRound: 0
+        }
+      ],
+      factSubmissions: [],
+      masterFactsUsed: []
+    });
+
+    const workText = JSON.stringify(document.sections.find((section) => section.id === "work-experience")?.items);
+    expect(workText).toContain("排班");
+    expect(workText.match(/广发银行北京分行/g)?.length).toBe(1);
   });
 });

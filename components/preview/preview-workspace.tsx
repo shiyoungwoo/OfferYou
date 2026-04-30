@@ -34,17 +34,12 @@ export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceP
     const measure = () => {
       if (contentRef.current) {
         const height = contentRef.current.scrollHeight;
-        const count = Math.ceil(height / 1123);
-        setRealPageCount(count);
-
-        // Squish level calculation
-        if (height <= 1123) {
-          setSquishLevel(0);
-        } else if (height <= 1250) {
-          setSquishLevel(1);
-        } else {
-          setSquishLevel(2);
-        }
+        const count = Math.max(1, Math.ceil(height / 1123));
+        setRealPageCount((current) => (current === count ? current : count));
+        setSquishLevel((current) => {
+          const next = getStableSquishLevel(height, current);
+          return current === next ? current : next;
+        });
       }
     };
 
@@ -318,6 +313,21 @@ export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceP
       </div>
     </div>
   );
+}
+
+export function getStableSquishLevel(height: number, currentLevel: number) {
+  if (currentLevel <= 0) {
+    if (height > 1250) return 2;
+    if (height > 1123) return 1;
+    return 0;
+  }
+
+  if (currentLevel === 1) {
+    if (height > 1280) return 2;
+    return 1;
+  }
+
+  return 2;
 }
 
 function getPersonalInfoValue(document: ResumeDocument) {

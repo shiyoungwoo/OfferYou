@@ -11,7 +11,11 @@ export type OpenAICompatibleConfig = {
 };
 
 export function hasOpenAICompatibleConfig() {
-  return Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_BASE_URL && process.env.OPENAI_MODEL);
+  return Boolean(
+    (process.env.OPENAI_API_KEY || process.env.MIMO_API_KEY) &&
+      (process.env.OPENAI_BASE_URL || process.env.MIMO_BASE_URL) &&
+      (process.env.OPENAI_MODEL || process.env.MIMO_MODEL)
+  );
 }
 
 export function getOpenAICompatibleConfig(): OpenAICompatibleConfig | null {
@@ -20,9 +24,9 @@ export function getOpenAICompatibleConfig(): OpenAICompatibleConfig | null {
   }
 
   return {
-    apiKey: process.env.OPENAI_API_KEY ?? "",
-    baseUrl: process.env.OPENAI_BASE_URL ?? "",
-    model: process.env.OPENAI_MODEL ?? ""
+    apiKey: process.env.OPENAI_API_KEY ?? process.env.MIMO_API_KEY ?? "",
+    baseUrl: process.env.OPENAI_BASE_URL ?? process.env.MIMO_BASE_URL ?? "",
+    model: process.env.OPENAI_MODEL ?? process.env.MIMO_MODEL ?? ""
   };
 }
 
@@ -66,7 +70,65 @@ export async function callOpenAICompatible(options: OpenAICompatibleCallOptions)
 }
 
 function stripMarkdown(text: string) {
-  return text.replace(/^```json\s*/, "").replace(/```\s*$/, "").trim();
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
+  if (fenced?.[1]) {
+    return fenced[1].trim();
+  }
+
+  const fencedLoose = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/iu);
+  if (fencedLoose?.[1]) {
+    return extractFirstJsonValue(fencedLoose[1]) ?? fencedLoose[1].trim();
+  }
+
+  const jsonValue = extractFirstJsonValue(trimmed);
+  if (jsonValue) return jsonValue;
+
+  return trimmed;
+}
+
+function extractFirstJsonValue(text: string) {
+  const source = text.trim();
+  const start = source.search(/[\[{]/u);
+  if (start === -1) return null;
+
+  const open = source[start];
+  const close = open === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = inString;
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === open) {
+      depth += 1;
+    } else if (char === close) {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(start, index + 1).trim();
+      }
+    }
+  }
+
+  return null;
 }
 
 export async function callOpenAICompatibleJSON<T = unknown>(

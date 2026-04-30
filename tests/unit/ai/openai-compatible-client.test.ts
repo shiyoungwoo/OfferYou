@@ -8,6 +8,9 @@ describe("openai compatible client", () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;
     delete process.env.OPENAI_MODEL;
+    delete process.env.MIMO_API_KEY;
+    delete process.env.MIMO_BASE_URL;
+    delete process.env.MIMO_MODEL;
   });
 
   it("treats the OpenAI compatible config as unavailable when env vars are missing", async () => {
@@ -52,6 +55,47 @@ describe("openai compatible client", () => {
         method: "POST",
         headers: expect.objectContaining({
           Authorization: "Bearer openai-key"
+        })
+      })
+    );
+  });
+
+  it("accepts Xiaomi MiMo env vars as the OpenAI-compatible provider", async () => {
+    process.env.MIMO_API_KEY = "mimo-key";
+    process.env.MIMO_BASE_URL = "https://api.xiaomimimo.com/v1";
+    process.env.MIMO_MODEL = "mimo-v2.5-pro";
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: "mimo response"
+            }
+          }
+        ]
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { callOpenAICompatible, getOpenAICompatibleConfig, hasOpenAICompatibleConfig } = await import(
+      "@/lib/ai/openai-compatible-client"
+    );
+
+    expect(hasOpenAICompatibleConfig()).toBe(true);
+    expect(getOpenAICompatibleConfig()).toEqual({
+      apiKey: "mimo-key",
+      baseUrl: "https://api.xiaomimimo.com/v1",
+      model: "mimo-v2.5-pro"
+    });
+
+    await expect(callOpenAICompatible({ systemPrompt: "system", userPrompt: "user" })).resolves.toBe("mimo response");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.xiaomimimo.com/v1/chat/completions",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer mimo-key"
         })
       })
     );
@@ -109,5 +153,71 @@ describe("openai compatible client", () => {
     });
 
     expect(invalid).toBeNull();
+  });
+
+  it("parses Xiaomi-style fenced JSON responses", async () => {
+    process.env.MIMO_API_KEY = "mimo-key";
+    process.env.MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
+    process.env.MIMO_MODEL = "mimo-v2.5-pro";
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: "```json\n{\"ok\":true,\"provider\":\"mimo\"}\n```"
+            }
+          }
+        ]
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { callOpenAICompatibleJSON } = await import("@/lib/ai/openai-compatible-client");
+
+    await expect(
+      callOpenAICompatibleJSON<{ ok: boolean; provider: string }>({
+        systemPrompt: "system",
+        userPrompt: "user"
+      })
+    ).resolves.toEqual({ ok: true, provider: "mimo" });
+  });
+
+  it("parses the first JSON object when the model adds trailing explanation", async () => {
+    process.env.MIMO_API_KEY = "mimo-key";
+    process.env.MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
+    process.env.MIMO_MODEL = "mimo-v2.5-pro";
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: [
+                "```json",
+                "{\"ok\":true,\"items\":[{\"title\":\"OfferYou\",\"note\":\"保留 { 括号 } 文本\"}]}",
+                "```",
+                "以上 JSON 可直接使用。"
+              ].join("\n")
+            }
+          }
+        ]
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { callOpenAICompatibleJSON } = await import("@/lib/ai/openai-compatible-client");
+
+    await expect(
+      callOpenAICompatibleJSON<{ ok: boolean; items: Array<{ title: string }> }>({
+        systemPrompt: "system",
+        userPrompt: "user"
+      })
+    ).resolves.toEqual({
+      ok: true,
+      items: [{ title: "OfferYou", note: "保留 { 括号 } 文本" }]
+    });
   });
 });

@@ -23,21 +23,30 @@ type DatedSuggestionEntry = {
 };
 
 type PartDecision = "accepted" | "rejected";
+type SuggestionGroup = {
+  key: string;
+  title: string;
+  suggestions: EditableSuggestion[];
+};
 
 export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
   const router = useRouter();
   const [draftSuggestions, setDraftSuggestions] = useState<EditableSuggestion[]>(() =>
     createEditableSuggestions(suggestions)
   );
-  const [expandedId, setExpandedId] = useState<string | null>(suggestions[0]?.id ?? null);
+  const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(
+    () => groupSuggestions(createEditableSuggestions(suggestions))[0]?.key ?? null
+  );
   const [openRevisionId, setOpenRevisionId] = useState<string | null>(null);
   const [decidedParts, setDecidedParts] = useState<Record<string, Record<number, PartDecision>>>({});
+  const groups = React.useMemo(() => groupSuggestions(draftSuggestions), [draftSuggestions]);
 
   useEffect(() => {
     setDraftSuggestions(createEditableSuggestions(suggestions));
-    setExpandedId((current) => {
-      if (current && suggestions.some((item) => item.id === current)) return current;
-      return current === null ? null : (suggestions[0]?.id ?? null);
+    setExpandedGroupKey((current) => {
+      const nextGroups = groupSuggestions(createEditableSuggestions(suggestions));
+      if (current && nextGroups.some((group) => group.key === current)) return current;
+      return current;
     });
     setOpenRevisionId((current) => (current && suggestions.some((item) => item.id === current) ? current : null));
     // Keep decidedParts if IDs still exist
@@ -82,193 +91,94 @@ export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
     );
   }
 
+  function markSuggestionDecision(id: string, decision: PartDecision, groupKey: string) {
+    setDraftSuggestions((current) => {
+      const nextStatus: WorkspaceSuggestion["status"] = decision === "accepted" ? "accepted" : "rejected";
+      const next = current.map((suggestion) =>
+        suggestion.id === id ? { ...suggestion, status: nextStatus } : suggestion
+      );
+      const nextGroups = groupSuggestions(next);
+      const currentGroupIndex = nextGroups.findIndex((group) => group.key === groupKey);
+      const currentGroup = nextGroups[currentGroupIndex];
+
+      if (currentGroup && currentGroup.suggestions.every((suggestion) => suggestion.status !== "pending")) {
+        setExpandedGroupKey(findNextPendingGroupKey(nextGroups, currentGroupIndex));
+      }
+
+      return next;
+    });
+  }
+
   return (
     <section className="rounded-[1.75rem] border border-line bg-white/85 p-6 shadow-card">
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">修改建议</p>
-          <h2 className="mt-3 text-2xl font-semibold">把真实经历改得更像你，也更贴近岗位</h2>
+          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">简历优化改写</p>
+          <h2 className="mt-3 text-2xl font-semibold">逐条确认优化内容</h2>
         </div>
         <div className="rounded-full border border-line px-4 py-2 text-sm text-slate-600">{suggestions.length} 条建议</div>
       </div>
 
-      <div className="mt-6 space-y-4 w-full min-w-0">
-        {draftSuggestions.length > 0 ? (
-          draftSuggestions.map((suggestion) => {
-            const isExpanded = expandedId === suggestion.id;
-            const { baseReason, gapReminders, qualityNotes } = parseExtendedReasonText(suggestion.editedReasonText);
+      <div className="mt-6 space-y-5 w-full min-w-0">
+        {groups.length > 0 ? (
+          groups.map((group) => {
+            const isExpanded = expandedGroupKey === group.key;
+            const confirmedCount = group.suggestions.filter((suggestion) => suggestion.status !== "pending").length;
 
             return (
-              <article key={suggestion.id} className="rounded-[1.5rem] border border-line bg-paper p-5 w-full min-w-0 overflow-hidden shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-4 min-w-0">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-accent/10 text-[10px] font-bold text-accent shadow-sm">
-                      {suggestion.status === "accepted" ? "✓" : suggestion.status === "rejected" ? "×" : "!"}
-                    </div>
-                    <span className={`text-sm font-bold tracking-tight ${suggestion.status === "pending" ? "text-slate-800" : "text-slate-500"}`}>
-                      {suggestion.title}
-                    </span>
-                    {suggestion.status !== "pending" && (
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                        {suggestion.status === "accepted" ? "已处理" : "已跳过"}
-                      </span>
-                    )}
-                  </div>
-
-                  <button
-                    className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-accent hover:text-accent"
-                    onClick={() => setExpandedId(isExpanded ? null : suggestion.id)}
-                    type="button"
-                  >
+              <article key={group.key} className="rounded-[1.75rem] border border-line bg-paper p-5 shadow-sm">
+                <button
+                  className="flex w-full flex-wrap items-center justify-between gap-4 text-left"
+                  onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}
+                  type="button"
+                >
+                  <span className="text-2xl font-semibold text-ink">{group.title}</span>
+                  <span className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-600">
+                    {confirmedCount} / {group.suggestions.length} 已确认
+                  </span>
+                  <span className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700">
                     {isExpanded ? "收起详情" : "展开详情"}
-                  </button>
-                </div>
-
-                <div className="mt-4 flex flex-col gap-2">
-                  <p className="text-xs font-medium text-slate-500">{getSuggestionDirectionCopy(suggestion)}</p>
-                </div>
+                  </span>
+                </button>
 
                 {!isExpanded ? (
                   <div className="mt-4 rounded-[1.25rem] border border-dashed border-line bg-white px-4 py-3 text-sm leading-6 text-slate-700">
-                    {clipText(suggestion.editedAfterText, 110)}
+                    {group.suggestions.map((suggestion) => firstUsefulLine(suggestion.editedAfterText)).join(" / ")}
                   </div>
                 ) : (
-                  <>
-                    <div className="mt-4 flex flex-col space-y-12">
-                      {(() => {
-                        const text = suggestion.beforeText;
-                        const revisedText = suggestion.editedAfterText;
-                        const decisions = decidedParts[suggestion.id] || {};
-                        
-                        const beforeEntries = splitDatedSuggestionEntries(text);
-                        const afterEntries = splitDatedSuggestionEntries(revisedText);
-                        const canSplitByDate = beforeEntries.length > 1 && afterEntries.length >= beforeEntries.length;
-
-                        if (canSplitByDate) {
-                          return (
-                            <div className="relative">
-                              <div className="absolute -left-3 top-0 bottom-0 w-1 bg-slate-100 rounded-full" title="这些项目属于同一个改写组" />
-                              <div className="space-y-12">
-                                {beforeEntries.map((entry, idx) => {
-                                  // Find the best matching revised entry by title overlap
-                                  let revisedEntry = afterEntries[idx];
-                                  if (afterEntries.length > 0) {
-                                    const bestMatch = findBestRevisedEntry(entry, afterEntries);
-                                    if (bestMatch) revisedEntry = bestMatch;
-                                  }
-
-                                  if (!revisedEntry) return null;
-
-                                  return (
-                                    <TSection 
-                                      key={`${suggestion.id}-${idx}`}
-                                      draftId={draftId}
-                                      suggestionId={suggestion.id}
-                                      currentStatus={decisions[idx] ?? "pending"}
-                                      isDecided={Boolean(decisions[idx])}
-                                      localOnly
-                                      actionAfterText={revisedEntry.body || `${revisedEntry.title} ${revisedEntry.date}`.trim()}
-                                      actionReasonText={idx === 0 ? suggestion.editedReasonText : ""}
-                                      title={`${entry.title} ${entry.date}`.trim()} 
-                                      original={entry.body} 
-                                      revised={revisedEntry.body || (revisedEntry ? `${revisedEntry.title} ${revisedEntry.date}`.trim() : "")} 
-                                      reason={idx === 0 ? suggestion.editedReasonText : ""} 
-                                      onActionComplete={async () => {
-                                        await router.refresh();
-                                      }}
-                                      onEdit={() => {}} // Local
-                                      onRevise={() => {
-                                        setOpenRevisionId(suggestion.id);
-                                      }}
-                                      onDecision={(decision) => {
-                                        setDecidedParts(prev => {
-                                          const nextDecisions = {
-                                            ...(prev[suggestion.id] || {}),
-                                            [idx]: decision
-                                          };
-
-                                          if (Object.keys(nextDecisions).length >= beforeEntries.length) {
-                                            void syncGroupedSuggestionDecision({
-                                              draftId,
-                                              suggestionId: suggestion.id,
-                                              decisions: nextDecisions,
-                                              beforeEntries,
-                                              afterEntries,
-                                              reasonText: suggestion.editedReasonText,
-                                              onSynced: async () => {
-                                                setExpandedId(null);
-                                                await router.refresh();
-                                              }
-                                            });
-                                          }
-
-                                          return {
-                                            ...prev,
-                                            [suggestion.id]: nextDecisions
-                                          };
-                                        });
-                                      }}
-                                      onUpdateRevised={(newBody) => {
-                                        setDraftSuggestions(current => current.map(s => {
-                                          if (s.id !== suggestion.id) return s;
-                                          const entries = splitDatedSuggestionEntries(s.editedAfterText);
-                                          if (entries[idx]) {
-                                            entries[idx].body = newBody;
-                                            const reconstructed = entries.map(e => `${e.title} ${e.date}\n${e.body}`).join("\n\n");
-                                            return { ...s, editedAfterText: reconstructed };
-                                          }
-                                          return s;
-                                        }));
-                                      }}
-                                    />
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <TSection 
-                            draftId={draftId}
-                            suggestionId={suggestion.id}
-                            currentStatus={suggestion.status}
-                            isDecided={suggestion.status !== "pending"}
-                            actionAfterText={suggestion.editedAfterText}
-                            actionReasonText={suggestion.editedReasonText}
-                            title={suggestion.title} 
-                            original={suggestion.beforeText} 
-                            revised={suggestion.editedAfterText} 
-                            reason={suggestion.editedReasonText} 
-                            onActionComplete={async () => {
-                              await router.refresh();
-                            }}
-                            onEdit={() => {}} // Local
-                            onRevise={() => {
-                              setOpenRevisionId(suggestion.id);
-                            }}
-                            onDecision={() => {
-                              setExpandedId(null);
-                            }}
-                            onUpdateRevised={(newText) => {
-                              updateSuggestionDraft(suggestion.id, { editedAfterText: newText });
-                            }}
-                          />
-                        );
-                      })()}
-                    </div>
-                  </>
+                  <div className="mt-5 space-y-8">
+                    {group.suggestions.map((suggestion) => (
+                      <SuggestionTBlocks
+                        key={suggestion.id}
+                        draftId={draftId}
+                        groupKey={group.key}
+                        decidedParts={decidedParts}
+                        markSuggestionDecision={markSuggestionDecision}
+                        openRevision={() => setOpenRevisionId(suggestion.id)}
+                        routerRefresh={async () => {
+                          await router.refresh();
+                        }}
+                        setDecidedParts={setDecidedParts}
+                        setDraftSuggestions={setDraftSuggestions}
+                        suggestion={suggestion}
+                        updateSuggestionDraft={updateSuggestionDraft}
+                      />
+                    ))}
+                  </div>
                 )}
 
-                <RevisionFeedbackDialog
-                  draftId={draftId}
-                  onActionComplete={async () => {
-                    await router.refresh();
-                  }}
-                  onClose={() => setOpenRevisionId(null)}
-                  open={openRevisionId === suggestion.id}
-                  suggestionId={suggestion.id}
-                />
+                {group.suggestions.map((suggestion) => (
+                  <RevisionFeedbackDialog
+                    key={`${suggestion.id}-dialog`}
+                    draftId={draftId}
+                    onActionComplete={async () => {
+                      await router.refresh();
+                    }}
+                    onClose={() => setOpenRevisionId(null)}
+                    open={openRevisionId === suggestion.id}
+                    suggestionId={suggestion.id}
+                  />
+                ))}
               </article>
             );
           })
@@ -282,11 +192,143 @@ export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
   );
 }
 
+function SuggestionTBlocks({
+  draftId,
+  groupKey,
+  decidedParts,
+  suggestion,
+  markSuggestionDecision,
+  openRevision,
+  routerRefresh,
+  setDecidedParts,
+  setDraftSuggestions,
+  updateSuggestionDraft
+}: {
+  draftId: string;
+  groupKey: string;
+  decidedParts: Record<string, Record<number, PartDecision>>;
+  suggestion: EditableSuggestion;
+  markSuggestionDecision: (id: string, decision: PartDecision, groupKey: string) => void;
+  openRevision: () => void;
+  routerRefresh: () => Promise<void>;
+  setDecidedParts: React.Dispatch<React.SetStateAction<Record<string, Record<number, PartDecision>>>>;
+  setDraftSuggestions: React.Dispatch<React.SetStateAction<EditableSuggestion[]>>;
+  updateSuggestionDraft: (id: string, patch: Partial<Pick<EditableSuggestion, "editedAfterText" | "editedReasonText">>) => void;
+}) {
+  const beforeEntries = splitDatedSuggestionEntries(suggestion.beforeText);
+  const afterEntries = splitDatedSuggestionEntries(suggestion.editedAfterText);
+  const decisions = decidedParts[suggestion.id] || {};
+  const canSplitByDate = beforeEntries.length > 1 && afterEntries.length >= beforeEntries.length;
+  const isEducation = normalizeSectionKey(suggestion.section) === "education";
+
+  if (!canSplitByDate) {
+    return (
+      <TSection
+        actionAfterText={suggestion.editedAfterText}
+        actionReasonText={suggestion.editedReasonText}
+        confirmOnly={isEducation}
+        currentStatus={suggestion.status}
+        draftId={draftId}
+        isDecided={suggestion.status !== "pending"}
+        jdCapability={getJdCapabilityLabel(suggestion)}
+        onActionComplete={routerRefresh}
+        onDecision={(decision) => markSuggestionDecision(suggestion.id, decision, groupKey)}
+        onEdit={() => {}}
+        onRevise={openRevision}
+        onUpdateRevised={(newText) => updateSuggestionDraft(suggestion.id, { editedAfterText: newText })}
+        original={suggestion.beforeText}
+        originalLabel={normalizeSectionKey(suggestion.section) === "summary" ? "原简历个人优势" : "原始简历内容"}
+        reason={suggestion.editedReasonText}
+        revised={suggestion.editedAfterText}
+        suggestionId={suggestion.id}
+        title={suggestion.title}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {beforeEntries.map((entry, index) => {
+        let revisedEntry = afterEntries[index];
+        const bestMatch = findBestRevisedEntry(entry, afterEntries);
+        if (bestMatch) revisedEntry = bestMatch;
+        if (!revisedEntry) return null;
+
+        return (
+          <TSection
+            key={`${suggestion.id}-${index}`}
+            actionAfterText={revisedEntry.body || `${revisedEntry.title} ${revisedEntry.date}`.trim()}
+            actionReasonText={index === 0 ? suggestion.editedReasonText : ""}
+            currentStatus={decisions[index] ?? "pending"}
+            draftId={draftId}
+            isDecided={Boolean(decisions[index])}
+            jdCapability={getJdCapabilityLabel(suggestion)}
+            localOnly
+            onActionComplete={routerRefresh}
+            onDecision={(decision) => {
+              setDecidedParts((previous) => {
+                const nextDecisions = {
+                  ...(previous[suggestion.id] || {}),
+                  [index]: decision
+                };
+
+                if (Object.keys(nextDecisions).length >= beforeEntries.length) {
+                  void syncGroupedSuggestionDecision({
+                    afterEntries,
+                    beforeEntries,
+                    decisions: nextDecisions,
+                    draftId,
+                    onSynced: async () => {
+                      markSuggestionDecision(suggestion.id, decision, groupKey);
+                      await routerRefresh();
+                    },
+                    reasonText: suggestion.editedReasonText,
+                    suggestionId: suggestion.id
+                  });
+                }
+
+                return {
+                  ...previous,
+                  [suggestion.id]: nextDecisions
+                };
+              });
+            }}
+            onEdit={() => {}}
+            onRevise={openRevision}
+            onUpdateRevised={(newBody) => {
+              setDraftSuggestions((current) =>
+                current.map((item) => {
+                  if (item.id !== suggestion.id) return item;
+                  const entries = splitDatedSuggestionEntries(item.editedAfterText);
+                  if (!entries[index]) return item;
+                  entries[index].body = newBody;
+                  return {
+                    ...item,
+                    editedAfterText: entries.map((nextEntry) => `${nextEntry.title} ${nextEntry.date}\n${nextEntry.body}`).join("\n\n")
+                  };
+                })
+              );
+            }}
+            original={entry.body}
+            originalLabel="原始简历内容"
+            reason={index === 0 ? suggestion.editedReasonText : ""}
+            revised={revisedEntry.body || `${revisedEntry.title} ${revisedEntry.date}`.trim()}
+            suggestionId={suggestion.id}
+            title={`${entry.title} ${entry.date}`.trim()}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function TSection({ 
   title, 
   original, 
   revised, 
   reason,
+  originalLabel = "原始简历内容",
+  originalHelper,
   draftId,
   suggestionId,
   currentStatus,
@@ -298,12 +340,16 @@ function TSection({
   isDecided,
   actionAfterText,
   actionReasonText,
-  localOnly = false
+  jdCapability,
+  localOnly = false,
+  confirmOnly = false
 }: { 
   title: string; 
   original: string; 
   revised: string; 
   reason: string;
+  originalLabel?: string;
+  originalHelper?: string;
   draftId: string;
   suggestionId: string;
   currentStatus: string;
@@ -315,7 +361,9 @@ function TSection({
   isDecided?: boolean;
   actionAfterText?: string;
   actionReasonText?: string;
+  jdCapability: string;
   localOnly?: boolean;
+  confirmOnly?: boolean;
 }) {
   const [localIsEditing, setLocalIsEditing] = React.useState(false);
   const [localRevised, setLocalRevised] = React.useState(revised);
@@ -330,67 +378,40 @@ function TSection({
   React.useEffect(() => {
     setLocalStatus(isDecided ? (currentStatus as "accepted" | "rejected") : "pending");
   }, [currentStatus, isDecided]);
-  const { baseReason, gapReminders, qualityNotes } = parseExtendedReasonText(reason);
-  const tags = reason.match(/；标签：([^；\n]+)/)?.[1]?.split("、") || [];
-  if (tags.length === 0 && baseReason.includes("「")) {
-    const focusMatch = baseReason.match(/「([^」]+)」/);
-    if (focusMatch) tags.push(focusMatch[1]);
-  }
 
   return (
     <div className="flex flex-col group w-full max-w-full overflow-hidden">
-      {/* T-Shape Header: Project Title + Actions */}
-      <div className="mb-2 rounded-t-[1.25rem] border border-line bg-slate-50/80 px-5 py-3 border-b-0 flex flex-nowrap items-center justify-between gap-4 min-w-0 w-full overflow-hidden">
-        <h4 className="text-sm md:text-base font-bold text-slate-800 leading-tight truncate min-w-0 flex-1">{title}</h4>
-        <div className="shrink-0 flex items-center gap-2">
-          {localIsEditing ? (
-             <span className="text-[10px] font-bold text-accent uppercase tracking-widest">编辑中...</span>
-          ) : (
-            <SuggestionActionBar
-              draftId={draftId}
-              suggestionId={suggestionId}
-              currentStatus={localStatus}
-              actionPayload={{
-                afterText: actionAfterText ?? localRevised,
-                reasonText: actionReasonText ?? reason
-              }}
-              localOnly={localOnly}
-              onActionComplete={async () => {
-                await onActionComplete();
-              }}
-              onEdit={() => setLocalIsEditing(true)}
-              onRevise={onRevise}
-              onAccept={() => {
-                setLocalStatus("accepted");
-                onDecision?.("accepted");
-              }}
-              onReject={() => {
-                setLocalStatus("rejected");
-                onDecision?.("rejected");
-              }}
-              compact
-            />
-          )}
-        </div>
+      <div className="mb-2 rounded-t-[1.25rem] border border-line bg-slate-50/80 px-5 py-3 border-b-0 flex flex-wrap items-center justify-between gap-4 min-w-0 w-full overflow-hidden">
+        <h4 className="text-sm md:text-base font-bold text-slate-800 leading-tight min-w-0 flex-1">{title}</h4>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${localStatus === "accepted" ? "bg-emerald-50 text-emerald-700" : localStatus === "rejected" ? "bg-rose-50 text-rose-600" : "bg-white text-slate-500"}`}>
+          {getSuggestionStatusLabel(localStatus)}
+        </span>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 border border-line rounded-b-[1.25rem] overflow-hidden shadow-sm hover:shadow-md transition-shadow min-w-0 w-full">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)] border border-line rounded-b-[1.25rem] overflow-hidden shadow-sm hover:shadow-md transition-shadow min-w-0 w-full">
         {/* Left: Original Content */}
         <div className="bg-white p-5 border-r border-line min-w-0 overflow-hidden w-full">
-          <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-400 mb-3">原始表达内容</p>
+          <p className="text-[10px] tracking-[0.2em] font-bold text-slate-400 mb-3">{originalLabel}</p>
           <div className="text-sm leading-7 text-slate-600 whitespace-pre-wrap break-all overflow-wrap-anywhere">
             {original}
           </div>
+          {originalHelper ? (
+            <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">{originalHelper}</p>
+          ) : null}
         </div>
         
         {/* Right: Revised Content + Analysis */}
         <div className={`p-5 flex flex-col min-w-0 overflow-hidden w-full transition-colors ${localStatus === "accepted" ? "bg-emerald-50/30" : localStatus === "rejected" ? "bg-rose-50/30" : "bg-accent/5"}`}>
-          <div className="rounded-xl bg-white/90 p-4 border border-accent/10 shadow-sm min-h-[120px] min-w-0 w-full overflow-hidden relative">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[10px] tracking-[0.2em] font-bold text-slate-400">AI 优化改写</p>
+            <span className="rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">{jdCapability}</span>
+          </div>
+          <div className="rounded-xl bg-white/95 p-5 border border-accent/10 shadow-sm min-w-0 w-full overflow-hidden relative">
             {localIsEditing ? (
               <div className="space-y-3">
                 <textarea
                   aria-label="改写后全文"
-                  className="w-full min-h-[140px] border-none bg-transparent text-sm font-semibold text-slate-800 leading-relaxed outline-none focus:ring-0 p-0 resize-none"
+                  className="w-full min-h-[260px] border-none bg-transparent text-sm font-semibold text-slate-800 leading-relaxed outline-none focus:ring-0 p-0 resize-y"
                   value={localRevised}
                   onChange={(e) => setLocalRevised(e.target.value)}
                   autoFocus
@@ -417,49 +438,40 @@ function TSection({
                 </div>
               </div>
             ) : (
-              <div className={`text-sm font-semibold leading-relaxed whitespace-pre-wrap break-all overflow-wrap-anywhere ${localStatus === "rejected" ? "text-slate-400 line-through opacity-50" : "text-slate-800"}`}>
-                {revised}
-              </div>
-            )}
-
-            {/* Tags moved below content */}
-            {tags.length > 0 && !localIsEditing && (
-              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-1.5 overflow-hidden">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mr-1 self-center">核心关键词:</span>
-                {tags.map((tag, i) => (
-                  <span key={i} className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-blue-600 uppercase tracking-wider whitespace-nowrap border border-blue-100">
-                    {tag}
-                  </span>
-                ))}
-              </div>
+              <>
+                <div className={`text-sm font-semibold leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere ${localStatus === "rejected" ? "text-slate-400 line-through opacity-50" : "text-slate-800"}`}>
+                  {localRevised}
+                </div>
+                <div className="mt-5 flex justify-end border-t border-slate-100 pt-4">
+                  <SuggestionActionBar
+                    actionPayload={{
+                      afterText: actionAfterText ?? localRevised,
+                      reasonText: actionReasonText ?? reason
+                    }}
+                    compact
+                    confirmOnly={confirmOnly}
+                    currentStatus={localStatus}
+                    draftId={draftId}
+                    localOnly={localOnly}
+                    onAccept={() => {
+                      setLocalStatus("accepted");
+                      onDecision?.("accepted");
+                    }}
+                    onActionComplete={async () => {
+                      await onActionComplete();
+                    }}
+                    onEdit={() => setLocalIsEditing(true)}
+                    onReject={() => {
+                      setLocalStatus("rejected");
+                      onDecision?.("rejected");
+                    }}
+                    onRevise={onRevise}
+                    suggestionId={suggestionId}
+                  />
+                </div>
+              </>
             )}
           </div>
-
-          {/* Analysis blocks removed as requested */}
-          
-          {gapReminders.length > 0 && !localIsEditing && (
-            <div className="mt-3 rounded-[0.85rem] border border-blue-100 bg-blue-50/40 px-3 py-2 text-[10px] leading-4 text-blue-800 min-w-0 w-full overflow-hidden">
-              <div className="flex items-center gap-1 mb-0.5 shrink-0">
-                <span className="h-1 w-1 rounded-full bg-blue-400 shrink-0" />
-                <p className="font-bold uppercase tracking-[0.05em] text-[8px] shrink-0 text-blue-600">建议补充内容</p>
-              </div>
-              <p className="text-slate-600 font-medium break-all overflow-wrap-anywhere">
-                {gapReminders.join("、")}
-              </p>
-            </div>
-          )}
-
-          {qualityNotes.length > 0 && !localIsEditing && (
-            <div className="mt-3 rounded-[0.85rem] border border-amber-100 bg-amber-50/60 px-3 py-2 text-[10px] leading-4 text-amber-900 min-w-0 w-full overflow-hidden">
-              <div className="flex items-center gap-1 mb-0.5 shrink-0">
-                <span className="h-1 w-1 rounded-full bg-amber-400 shrink-0" />
-                <p className="font-bold uppercase tracking-[0.05em] text-[8px] shrink-0 text-amber-700">质量提示</p>
-              </div>
-              <p className="text-slate-600 font-medium break-all overflow-wrap-anywhere">
-                {qualityNotes.join("、")}
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </div>
@@ -472,6 +484,61 @@ function createEditableSuggestions(suggestions: WorkspaceSuggestion[]): Editable
     editedAfterText: suggestion.afterText,
     editedReasonText: suggestion.reasonText
   }));
+}
+
+function findNextPendingGroupKey(groups: SuggestionGroup[], currentGroupIndex: number) {
+  const nextPendingGroup = groups
+    .slice(currentGroupIndex + 1)
+    .find((group) => group.suggestions.some((suggestion) => suggestion.status === "pending"));
+
+  return nextPendingGroup?.key ?? null;
+}
+
+function groupSuggestions(suggestions: EditableSuggestion[]): SuggestionGroup[] {
+  const order = ["summary", "work", "project", "education", "supplement", "other"];
+  const labels: Record<string, { title: string }> = {
+    summary: { title: "个人优势" },
+    work: { title: "工作经历" },
+    project: { title: "项目经历" },
+    education: { title: "教育背景" },
+    supplement: { title: "补充信息" },
+    other: { title: "其他经历" }
+  };
+  const buckets = new Map<string, EditableSuggestion[]>();
+
+  for (const suggestion of suggestions) {
+    const key = normalizeSectionKey(suggestion.section);
+    buckets.set(key, [...(buckets.get(key) ?? []), suggestion]);
+  }
+
+  return order
+    .filter((key) => buckets.has(key))
+    .map((key) => ({
+      key,
+      title: labels[key].title,
+      suggestions: buckets.get(key) ?? []
+    }));
+}
+
+function normalizeSectionKey(section: string) {
+  const normalized = section.toLowerCase();
+  if (["summary", "advantage", "profile"].includes(normalized)) return "summary";
+  if (["experience", "work"].includes(normalized)) return "work";
+  if (normalized.includes("project")) return "project";
+  if (normalized.includes("education")) return "education";
+  if (["skill", "certificate", "supplement"].includes(normalized)) return "supplement";
+  return "other";
+}
+
+function getJdCapabilityLabel(suggestion: WorkspaceSuggestion) {
+  const text = `${suggestion.title} ${suggestion.beforeText} ${suggestion.afterText} ${suggestion.reasonText}`.toLowerCase();
+
+  if (/prompt|提示词|llm|大模型|ai 工具|ai工具|agent/u.test(text)) return "对应：AI 工具 / Prompt 应用";
+  if (/产品|需求|mvp|流程|工作流|迭代|原型/u.test(text)) return "对应：产品流程与需求拆解";
+  if (/数据|excel|tableau|分析|指标|统计/u.test(text)) return "对应：数据分析与结果表达";
+  if (/运营|内容|小红书|公众号|传播|账号/u.test(text)) return "对应：内容运营与用户沟通";
+  if (/客户|b 端|协作|方案|交付|培训/u.test(text)) return "对应：B 端沟通与方案推进";
+  return "对应：岗位相关经历表达";
 }
 
 function splitDatedSuggestionEntries(text: string): DatedSuggestionEntry[] {
@@ -682,10 +749,11 @@ function parseExtendedReasonText(reasonText: string) {
   };
 }
 
-function clipText(text: string, maxLength: number) {
-  if (text.length <= maxLength) {
-    return text;
-  }
-
-  return `${text.slice(0, maxLength).trimEnd()}…`;
+function firstUsefulLine(text: string) {
+  return (
+    text
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find(Boolean) ?? text.trim()
+  );
 }

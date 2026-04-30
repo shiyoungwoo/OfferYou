@@ -4,6 +4,7 @@ import {
   getAvailableModelProviders as getConfiguredModelProviders,
   getDefaultModelProvider,
   hasGeminiApiKey,
+  getModelProviderCapability,
   type ModelProviderKey
 } from "@/lib/ai/model-provider-config";
 import type { ModelTaskKey } from "@/lib/ai/model-task-config";
@@ -122,7 +123,7 @@ function getUnavailableProviderReason(
   }
 
   if (provider === "openai_compatible" && !openAICompatibleAvailable) {
-    return "未检测到 OpenAI 兼容配置，已切换到确定性回退。";
+    return "未检测到小米 MiMo / OpenAI 兼容配置，已切换到确定性回退。";
   }
 
   if (provider === "deterministic_fallback") {
@@ -134,7 +135,7 @@ function getUnavailableProviderReason(
 
 function getJsonParseFallbackReason(provider: ModelProviderKey) {
   if (provider === "openai_compatible") {
-    return "OpenAI 兼容接口返回内容无法解析为 JSON，已切换到确定性回退。";
+    return `${getProviderDisplayName(provider)} 返回内容无法解析为 JSON，已切换到确定性回退。`;
   }
 
   return "Gemini 返回内容无法解析为 JSON，已切换到确定性回退。";
@@ -145,13 +146,17 @@ function formatModelFailureReason(provider: ModelProviderKey, error: unknown) {
 
   if (provider === "openai_compatible") {
     return detail
-      ? `OpenAI 兼容调用失败，已切换到确定性回退。${detail}`
-      : "OpenAI 兼容调用失败，已切换到确定性回退。请稍后重试。";
+      ? `${getProviderDisplayName(provider)} 调用失败，已切换到确定性回退。${detail}`
+      : `${getProviderDisplayName(provider)} 调用失败，已切换到确定性回退。请稍后重试。`;
   }
 
   return detail
     ? `Gemini 调用失败，已切换到确定性回退。${detail}`
     : "Gemini 调用失败，已切换到确定性回退。请稍后重试。";
+}
+
+function getProviderDisplayName(provider: ModelProviderKey) {
+  return getModelProviderCapability(provider).title;
 }
 
 function summarizeModelError(error: unknown) {

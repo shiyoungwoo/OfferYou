@@ -49,12 +49,23 @@ describe("SuggestionList", () => {
     );
 
     expect(screen.getAllByText(/Master-derived rewrite|Resume baseline rewrite/).length).toBeGreaterThan(0);
-    expect(screen.getByText("这条建议重点是保留真实经历，同时让证据更有力量。")).toBeTruthy();
-    expect(screen.getByText("这条建议会更主动地把你的优势特质写出来。")).toBeTruthy();
+    expect(screen.getByText("简历优化改写")).toBeTruthy();
+    expect(screen.getByText("个人优势")).toBeTruthy();
+    expect(screen.getByText("项目经历")).toBeTruthy();
     expect(screen.getAllByText("展开详情").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("原始表达内容").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/原始简历内容|原简历个人优势/u).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/通常不会单独写/u)).toBeNull();
+    expect(screen.getAllByText(/对应：/u).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "接受" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "编辑" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "拒绝" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "微调" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Master fact: Workflow instrumentation rollout")).toBeNull();
+
+    fireEvent.click(screen.getByText("收起详情"));
+
+    expect(screen.getAllByText("展开详情").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/原始简历内容|原简历个人优势/u)).toBeNull();
   });
 
   it("falls back to whole suggestion when revised text has no date anchors", () => {
@@ -136,6 +147,62 @@ describe("SuggestionList", () => {
 
     await waitFor(() => {
       expect(screen.getByText("展开详情")).toBeTruthy();
+    });
+  });
+
+  it("collapses a completed group again after reopening and confirming it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: "accepted", snapshotSynced: true })
+      })
+    );
+
+    render(
+      <SuggestionList
+        draftId="draft-1"
+        suggestions={[
+          {
+            id: "s1",
+            section: "summary",
+            title: "个人优势",
+            beforeText: "原始个人优势",
+            afterText: "改写后的个人优势",
+            reasonText: "保留事实并贴近岗位。",
+            status: "pending",
+            sourceKind: "resume_baseline",
+            sourceLabel: "小米 MiMo 改写建议",
+            revisionRound: 0
+          },
+          {
+            id: "s2",
+            section: "project",
+            title: "项目经历",
+            beforeText: "原始项目",
+            afterText: "改写后的项目",
+            reasonText: "保留事实并贴近岗位。",
+            status: "pending",
+            sourceKind: "resume_baseline",
+            sourceLabel: "小米 MiMo 改写建议",
+            revisionRound: 0
+          }
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "接受" })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("项目经历")).toBeTruthy();
+      expect(screen.getByText("收起详情")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getAllByText("展开详情")[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "已接受" })[0]);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("展开详情").length).toBeGreaterThan(0);
     });
   });
 });

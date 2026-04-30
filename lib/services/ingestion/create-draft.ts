@@ -1,6 +1,7 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { analyzeDraft } from "@/lib/services/analysis/gap-analysis-service";
+import { calibrateResumeStructure } from "@/lib/services/calibration/resume-calibration-service";
 import { saveWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import type { PersistedWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import { getDefaultUserContext } from "@/lib/default-user";
@@ -31,6 +32,9 @@ export async function createDraft(input: CreateDraftInput): Promise<PersistedWor
   const resumeExtractedText = await extractTextFromResumeSource({
     content: input.resumeContent,
     rawReference: input.resumeAssetRef
+  });
+  const calibratedResume = await calibrateResumeStructure({
+    resumeText: resumeExtractedText || input.resumeContent || ""
   });
 
   const draftId = randomUUID();
@@ -105,7 +109,8 @@ export async function createDraft(input: CreateDraftInput): Promise<PersistedWor
           rationale: selectedCareerDirection.rationale
         }
       : undefined,
-    facts: factSeeds
+    facts: factSeeds,
+    calibratedResume
   });
 
   const draft: PersistedWorkspaceDraft = {
@@ -121,6 +126,7 @@ export async function createDraft(input: CreateDraftInput): Promise<PersistedWor
     resumeSourceRef: input.resumeAssetRef,
     profilePhotoAssetRef: input.profilePhotoAssetRef,
     resumeExtractedText,
+    calibratedResume,
     analysis: {
       fitScore: analysis.fitScore,
       optimizationMode: analysis.optimizationMode,

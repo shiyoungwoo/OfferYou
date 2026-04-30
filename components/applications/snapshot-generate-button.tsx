@@ -7,12 +7,14 @@ type SnapshotGenerateButtonProps = {
   draftId: string;
   acceptedSuggestionCount: number;
   totalSuggestionCount: number;
+  variant?: "panel" | "inline";
 };
 
 export function SnapshotGenerateButton({
   draftId,
   acceptedSuggestionCount,
-  totalSuggestionCount
+  totalSuggestionCount,
+  variant = "panel"
 }: SnapshotGenerateButtonProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -29,6 +31,19 @@ export function SnapshotGenerateButton({
 
       router.push(`/applications/${draftId}/preview`);
     });
+  }
+
+  if (variant === "inline") {
+    return (
+      <button
+        className="rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 disabled:opacity-50"
+        disabled={isPending}
+        onClick={generateSnapshot}
+        type="button"
+      >
+        {isPending ? "同步中..." : "同步预览"}
+      </button>
+    );
   }
 
   return (

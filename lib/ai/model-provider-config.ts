@@ -24,21 +24,22 @@ export function hasGeminiApiKey() {
 }
 
 export function hasOpenAICompatibleConfig() {
-  return Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_BASE_URL && process.env.OPENAI_MODEL);
+  return Boolean(
+    (process.env.OPENAI_API_KEY || process.env.MIMO_API_KEY) &&
+      (process.env.OPENAI_BASE_URL || process.env.MIMO_BASE_URL) &&
+      (process.env.OPENAI_MODEL || process.env.MIMO_MODEL)
+  );
 }
 
 export function getDefaultModelProvider(_task?: ModelTaskKey): ModelProviderKey {
   const envDefault = process.env.DEFAULT_MODEL_PROVIDER as ModelProviderKey;
   if (envDefault === "gemini" && hasGeminiApiKey()) return "gemini";
   if (envDefault === "openai_compatible" && hasOpenAICompatibleConfig()) return "openai_compatible";
+  if (envDefault === "openai_compatible") return "deterministic_fallback";
   if (envDefault === "deterministic_fallback") return "deterministic_fallback";
 
   if (hasOpenAICompatibleConfig()) {
     return "openai_compatible";
-  }
-
-  if (hasGeminiApiKey()) {
-    return "gemini";
   }
 
   return "deterministic_fallback";
@@ -58,7 +59,7 @@ export function getAvailableModelProviders(): ModelProviderInfo[] {
     },
     {
       key: "openai_compatible",
-      label: "OpenAI 兼容模式",
+      label: getOpenAICompatibleProviderLabel(),
       available: openAICompatibleAvailable,
       default: defaultProvider === "openai_compatible"
     },
@@ -73,12 +74,15 @@ export function getAvailableModelProviders(): ModelProviderInfo[] {
 
 export function getModelProviderCapability(provider: ModelProviderKey): ModelProviderCapability {
   if (provider === "openai_compatible") {
+    const isMimo = getOpenAICompatibleProviderLabel().includes("小米");
     return {
-      level: "text_only",
-      title: "文本模型",
-      description: "适合 JD 匹配、中文改写和结构化输出。遇到截图、图片或复杂 PDF 时，需要先完成解析和结构校准。",
+      level: isMimo ? "vision_optional" : "text_only",
+      title: isMimo ? "小米 MiMo" : "文本模型",
+      description: isMimo
+        ? "当前按 OpenAI 兼容接口调用小米 MiMo，优先用于 JD 匹配、中文改写和结构化输出；视觉校准需要后续接入图片消息。"
+        : "适合 JD 匹配、中文改写和结构化输出。遇到截图、图片或复杂 PDF 时，需要先完成解析和结构校准。",
       bestFor: ["岗位匹配", "简历改写", "面试准备"],
-      limitations: ["不能直接读取截图", "不能直接校准页面视觉结构"]
+      limitations: isMimo ? ["当前链路先接文本改写", "图片/截图校准接口待接入"] : ["不能直接读取截图", "不能直接校准页面视觉结构"]
     };
   }
 
@@ -99,4 +103,14 @@ export function getModelProviderCapability(provider: ModelProviderKey): ModelPro
     bestFor: ["离线兜底", "基础字段提取"],
     limitations: ["不能理解 JD 深层要求", "不能保证简历定制质量"]
   };
+}
+
+function getOpenAICompatibleProviderLabel() {
+  const model = process.env.OPENAI_MODEL ?? process.env.MIMO_MODEL ?? "";
+  const baseUrl = process.env.OPENAI_BASE_URL ?? process.env.MIMO_BASE_URL ?? "";
+  if (/mimo|xiaomi/i.test(`${model} ${baseUrl}`)) {
+    return "小米 MiMo";
+  }
+
+  return "OpenAI 兼容模式";
 }

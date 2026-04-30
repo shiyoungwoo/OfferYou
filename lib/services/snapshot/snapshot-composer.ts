@@ -93,16 +93,6 @@ export async function composeSnapshotDocument(draft: PersistedWorkspaceDraft): P
       items: buildEducationItems(draft, resumeSections, selectedSuggestions)
     }
   ];
-  const supplementItems = buildSupplementItems(draft, resumeSections, selectedSuggestions);
-  if (supplementItems.length > 0) {
-    sections.push({
-      id: "supplement",
-      title: "补充信息",
-      tone: "muted",
-      items: supplementItems
-    });
-  }
-
   return {
     templateKey: "professional-cn",
     header: {
@@ -121,14 +111,16 @@ function buildPersonalInfoItems(
   resumeSections: ReturnType<typeof extractResumeSections>
 ) {
   const education = formatEducationSummary(resumeSections.education[0]);
+  const language = extractLanguageSummary(resumeSections.skills);
   const items = [
     `手机：${resumeSignals.phone ?? "未填写"}`,
     `邮箱：${resumeSignals.email ?? "未填写"} ｜ 求职意向：${targetTitle}`,
     `学历：${education ?? "未填写"}`,
+    language ? `英语：${language}` : "",
     `居住地：${resumeSignals.location ?? "未填写"}`,
     `GitHub：${resumeSignals.github ?? "未填写"}`,
     `作品集：${resumeSignals.portfolio ?? "未填写"}`
-  ];
+  ].filter(Boolean);
 
   return toTextItems(items);
 }
@@ -168,13 +160,14 @@ function buildStrengthItems(
     }
   }
 
-  // Filter out any lines that look like work/project entries (contain dates or company names)
-  resultLines = resultLines.filter(line => {
-    const { dateRange } = extractDateRange(line);
-    const hasCompanyIndicator = /有限公司|集团|银行|工作室|Studio|Inc\.|Corp\.|Ltd\./i.test(line);
-    const hasProjectBrand = /OfferYou|岗位定制|简历助手/i.test(line);
-    return !dateRange && !hasCompanyIndicator && !hasProjectBrand;
-  });
+  if (acceptedStrengths.length === 0) {
+    resultLines = resultLines.filter(line => {
+      const { dateRange } = extractDateRange(line);
+      const hasCompanyIndicator = /有限公司|集团|银行|工作室|Studio|Inc\.|Corp\.|Ltd\./i.test(line);
+      const hasProjectBrand = /OfferYou|岗位定制|简历助手/i.test(line);
+      return !dateRange && !hasCompanyIndicator && !hasProjectBrand;
+    });
+  }
 
   // Add talent profile context if available
   if (draft.talentProfileUsed?.headline) {
@@ -220,13 +213,35 @@ function buildWorkExperienceItems(
   suggestions: PersistedWorkspaceDraft["suggestions"]
 ) {
   const rawWorkEntries = draft.calibratedResume ? [] : extractRawSectionEntries(draft.resumeExtractedText ?? "", "work");
+  const suggestionEntries = suggestions
+    .filter((suggestion) => isSuggestionForSection(suggestion, ["experience"]) && !isInternshipLike(suggestion.afterText))
+    .map((suggestion) => createSuggestionEntry(suggestion))
+    .filter((entry) => !isGenericWorkEntry(entry));
+  if (suggestionEntries.length > 0) {
+    return dedupeEntries(suggestionEntries)
+      .sort((a, b) => {
+        const internshipDelta = Number(isInternshipEntry(a)) - Number(isInternshipEntry(b));
+        if (internshipDelta !== 0) {
+          return internshipDelta;
+        }
+
+        return scoreEntryForRole(b, roleContext) - scoreEntryForRole(a, roleContext);
+      })
+      .map((entry, index) => compactEntryForOnePage(entry, roleContext, index, "work"))
+      .slice(0, 3);
+  }
+
+  const rewrittenWorkKeys = suggestionEntries.map((entry) => normalizeResumeEntryKey(entry));
+  const uniqueResumeWork = resumeSections.work.filter(
+    (entry) => !isGenericWorkEntry(entry) && !rewrittenWorkKeys.includes(normalizeResumeEntryKey(entry))
+  );
+  const uniqueRawWorkEntries = rawWorkEntries.filter(
+    (entry) => !rewrittenWorkKeys.includes(normalizeResumeEntryKey(entry))
+  );
   const items = dedupeEntries([
-    ...suggestions
-      .filter((suggestion) => isSuggestionForSection(suggestion, ["experience"]) && !isInternshipLike(suggestion.afterText))
-      .map((suggestion) => createSuggestionEntry(suggestion))
-      .filter((entry) => !isGenericWorkEntry(entry)),
-    ...rawWorkEntries,
-    ...resumeSections.work.filter((entry) => !isGenericWorkEntry(entry)),
+    ...suggestionEntries,
+    ...uniqueRawWorkEntries,
+    ...uniqueResumeWork,
   ])
     .sort((a, b) => {
       const internshipDelta = Number(isInternshipEntry(a)) - Number(isInternshipEntry(b));
@@ -258,6 +273,13 @@ function buildProjectItems(
   const projectSuggestions = suggestions
     .filter((suggestion) => isSuggestionForSection(suggestion, ["project"]))
     .map((suggestion) => createSuggestionEntry(suggestion));
+  if (projectSuggestions.length > 0) {
+    return dedupeEntries(projectSuggestions)
+      .sort((a, b) => scoreEntryForRole(b, roleContext) - scoreEntryForRole(a, roleContext))
+      .map((entry, index) => compactEntryForOnePage(entry, roleContext, index, "project"))
+      .slice(0, 3);
+  }
+
   const rewrittenProjectKeys = projectSuggestions.map((entry) => normalizeEntryHeadingKey(entry.heading));
   const uniqueResumeProjects = resumeSections.projects.filter(
     (entry) => !rewrittenProjectKeys.includes(normalizeEntryHeadingKey(entry.heading))
@@ -332,6 +354,18 @@ function buildSupplementItems(
   return toTextItems(importantLines.slice(0, 1));
 }
 
+function extractLanguageSummary(lines: string[]) {
+  const source = lines.join(" ");
+  const hits = [
+    source.match(/CET[-\s]?6|英语六级|六级/iu)?.[0],
+    source.match(/CET[-\s]?4|英语四级|四级/iu)?.[0],
+    source.match(/雅思\s*\d+(?:\.\d+)?|IELTS\s*\d+(?:\.\d+)?/iu)?.[0],
+    source.match(/托福\s*\d+|TOEFL\s*\d+/iu)?.[0]
+  ].filter(Boolean) as string[];
+
+  return dedupeItems(hits.map((hit) => hit.replace(/英语/u, "").replace(/\s+/g, " ").trim())).join(" / ");
+}
+
 function buildResumeDataFromCalibratedResume(calibratedResume: CalibratedResumeProfile): {
   signals: ReturnType<typeof extractResumeSignals>;
   sections: ReturnType<typeof extractResumeSections>;
@@ -348,7 +382,7 @@ function buildResumeDataFromCalibratedResume(calibratedResume: CalibratedResumeP
       .map((entry) => mapCalibratedEntryToParsedResumeEntry(entry, "work")),
     education: calibratedResume.entries
       .filter((entry) => entry.section === "education")
-      .map((entry) => mapCalibratedEntryToParsedResumeEntry(entry, "education")),
+      .flatMap((entry) => splitCalibratedEducationEntry(entry)),
     projects: calibratedResume.entries
       .filter((entry) => entry.section === "project")
       .map((entry) => mapCalibratedEntryToParsedResumeEntry(entry, "project")),
@@ -428,6 +462,17 @@ function mapCalibratedEntryToParsedResumeEntry(
     summary: entry.bullets.join(" ").trim() || undefined,
     bullets: entry.bullets.length > 0 ? entry.bullets : undefined
   };
+}
+
+function splitCalibratedEducationEntry(entry: CalibratedResumeEntry): ParsedResumeEntry[] {
+  const source = entry.sourceText || [entry.title, entry.dateRange ?? "", ...(entry.bullets ?? [])].join(" ");
+  const segments = splitEducationLine(source);
+
+  if (segments.length > 1) {
+    return segments.map((segment) => formatEducationLine(segment));
+  }
+
+  return [mapCalibratedEntryToParsedResumeEntry(entry, "education")];
 }
 
 function buildCertificatesAndSkills(
@@ -995,6 +1040,18 @@ function formatWorkLikeLine(line: string, internship: boolean) {
 }
 
 function splitEducationLine(cleanedLine: string): string[] {
+  const schoolSegmentMatches = Array.from(
+    cleanedLine.matchAll(
+      /[\u4e00-\u9fa5A-Za-z]+(?:大学|学院|学校|University|College|School|Institute)[\s\S]*?(?=[\u4e00-\u9fa5A-Za-z]+(?:大学|学院|学校|University|College|School|Institute)|$)/g
+    )
+  )
+    .map((match) => match[0].trim().replace(/^[|｜\s]+|[|｜\s]+$/g, ""))
+    .filter(Boolean);
+
+  if (schoolSegmentMatches.length > 1) {
+    return schoolSegmentMatches;
+  }
+
   const schoolAnchors = ["大学", "学院", "学校", "University", "College", "School", "Institute"];
   const anchorRegex = new RegExp(schoolAnchors.join("|"), "g");
   const matches = Array.from(cleanedLine.matchAll(anchorRegex));
@@ -1179,6 +1236,10 @@ function normalizeEntryHeadingKey(value: string) {
   return normalized.slice(0, 24);
 }
 
+function normalizeResumeEntryKey(entry: Pick<ParsedResumeEntry, "heading" | "subheading">) {
+  return normalizeEntryHeadingKey([entry.heading, entry.subheading ?? ""].join(""));
+}
+
 function scoreEntryForRole(entry: ResumeDocumentEntryItem, roleContext: RoleContext) {
   const text = [entry.heading, entry.subheading, entry.summary, ...(entry.bullets ?? [])].join(" ");
   const normalized = text.toLowerCase();
@@ -1243,6 +1304,7 @@ function isNonEmptyString(value: string | undefined): value is string {
 function sanitizeHeading(heading: string) {
   return heading
     .replace(/\s*\)\s*/g, "｜") // Fix stray parentheses like 'OfferYou ) AI'
+    .replace(/\s*%\s*/g, " ")
     .replace(/\s*[|｜]\s*/g, " ｜ ")
     .replace(/\s+/g, " ")
     .trim();
@@ -1268,7 +1330,7 @@ function trimTextForResume(text: string | undefined, maxLength: number, isOrigin
     cleaned.lastIndexOf(" ", effectiveMax)
   );
   const safeEnd = cutAt >= Math.floor(effectiveMax * 0.55) ? cutAt : effectiveMax;
-  return `${cleaned.slice(0, safeEnd).replace(/[，；、\s]+$/u, "")}…`;
+  return cleaned.slice(0, safeEnd).replace(/[，；、\s]+$/u, "");
 }
 
 function isSuggestionForSection(
@@ -1340,6 +1402,11 @@ function toTextItems(items: string[]): ResumeDocumentItem[] {
 }
 
 function createSuggestionEntry(suggestion: SnapshotSuggestion): ParsedResumeEntry {
+  const structuredEntry = parseStructuredSuggestionEntry(suggestion);
+  if (structuredEntry) {
+    return structuredEntry;
+  }
+
   const heading = deriveSuggestionEntryHeading(suggestion);
   const cleanedText = stripRedundantEntryHeading(heading, cleanGeneratedResumeText(suggestion.afterText));
   const bullets = splitIntoBullets(cleanedText);
@@ -1352,12 +1419,68 @@ function createSuggestionEntry(suggestion: SnapshotSuggestion): ParsedResumeEntr
   };
 }
 
+function parseStructuredSuggestionEntry(suggestion: SnapshotSuggestion): ParsedResumeEntry | null {
+  const lines = cleanGeneratedResumeText(suggestion.afterText)
+    .split(/\r?\n/u)
+    .map((line) => line.trim().replace(/^[•·▪\-–—]+\s*/, ""))
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  const section = normalizeSuggestionSection(suggestion.section);
+  const firstLine = lines[0] ?? "";
+  const secondLine = lines[1] ?? "";
+  const secondLineDate = extractDateRange(secondLine);
+  const firstLineDate = extractDateRange(firstLine);
+  const headerLine = secondLineDate.dateRange && !secondLineDate.rest ? `${firstLine} ${secondLine}` : firstLine;
+  const bodyStartIndex = secondLineDate.dateRange && !secondLineDate.rest ? 2 : 1;
+  const bodyLines = lines.slice(bodyStartIndex);
+
+  if (section === "experience" && (firstLineDate.dateRange || secondLineDate.dateRange || /公司|银行|分行|集团|科技/u.test(firstLine))) {
+    const entry = formatWorkLikeLine(headerLine, /实习/u.test(headerLine));
+    entry.summary = bodyLines[0] ?? entry.summary;
+    entry.bullets = bodyLines.length > 1 ? bodyLines.slice(1) : entry.bullets;
+    return entry;
+  }
+
+  if (section === "project" && (firstLineDate.dateRange || secondLineDate.dateRange || /项目|OfferYou|自媒体|工具/u.test(firstLine))) {
+    const titleAndDate = extractDateRange(headerLine);
+    const entry: ParsedResumeEntry = {
+      heading: titleAndDate.rest || firstLine,
+      meta: titleAndDate.dateRange || undefined,
+      summary: bodyLines[0],
+      bullets: bodyLines.length > 1 ? bodyLines.slice(1) : undefined
+    };
+    return entry;
+  }
+
+  return null;
+}
+
 function stripRedundantEntryHeading(heading: string, text: string) {
   if (/OfferYou/i.test(heading)) {
     return text
       .replace(/^OfferYou\s*\)?\s*AI\s*岗位定制简历助手\s*（?个人(?:产品)?项目）?\s*(?:20\d{2}[./-]\d{1,2}\s*[-至到]\s*至今)?\s*/iu, "")
       .replace(/^OfferYou\s*[｜|]\s*AI\s*岗位定制简历助手\s*/iu, "")
       .trim();
+  }
+
+  const lines = text
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const firstLine = lines[0] ?? "";
+  const headingKey = normalizeEntryHeadingKey(heading);
+  const firstLineKey = normalizeEntryHeadingKey(firstLine);
+  const strongHeadingOverlap =
+    headingKey.length >= 6 &&
+    firstLineKey.length >= 6 &&
+    (firstLineKey.includes(headingKey.slice(0, 8)) || headingKey.includes(firstLineKey.slice(0, 8)));
+
+  if (lines.length > 1 && extractDateRange(firstLine).dateRange && strongHeadingOverlap) {
+    return lines.slice(1).join("\n").trim();
   }
 
   return text;
