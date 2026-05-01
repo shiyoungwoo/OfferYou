@@ -95,7 +95,11 @@ export async function querySql<T>(sql: string): Promise<T[]> {
     return [];
   }
 
-  return JSON.parse(stdout) as T[];
+  try {
+    return JSON.parse(stdout) as T[];
+  } catch {
+    throw new Error("数据库查询结果无法解析，请检查 SQLite 输出。");
+  }
 }
 
 export function sqlString(value: string) {

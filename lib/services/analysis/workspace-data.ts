@@ -1,6 +1,5 @@
 import { readWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import { cleanGeneratedResumeText, normalizeOcrResumeText } from "@/lib/services/analysis/text-cleaner";
-import { rewriteFactForJd } from "@/lib/services/analysis/suggestion-generator";
 import type { CalibratedResumeProfile } from "@/lib/services/calibration/resume-calibration-types";
 
 export type WorkspaceSummary = {
@@ -29,6 +28,9 @@ export type WorkspaceSuggestion = {
   status: "pending" | "accepted" | "rejected";
   sourceKind: "resume_baseline" | "master_fact" | "target_role_fit" | "revision";
   sourceLabel: string;
+  generationMode?: "model" | "deterministic_fallback";
+  modelProvider?: "gemini" | "openai_compatible" | "deterministic_fallback";
+  modelFallbackReason?: string;
   revisionRound?: number;
   parentSuggestionId?: string;
   userFeedbackType?: string;
@@ -92,24 +94,11 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
       careerDirectionUsed: persisted.careerDirectionUsed,
       calibratedResume: persisted.calibratedResume,
       masterFactsUsed: persisted.masterFactsUsed ?? [],
-      suggestions: persisted.suggestions.map(s => {
+      suggestions: persisted.suggestions.map((s) => {
         const cleanedBefore =
           s.section === "summary" && calibratedSummaryText
             ? calibratedSummaryText
             : normalizeOcrResumeText(s.beforeText);
-        
-        // Detect stale generic fallback text and repair it on the fly
-        if (s.afterText.includes("相关性较弱") && s.afterText.includes("仅保留时间及岗位")) {
-          // Trigger a lightweight re-generation for this specific item
-          const jdContext = persisted.jdPreview || (persisted.analysis.gaps.join(" ") + " " + persisted.jobTitle);
-          const { after, reason } = rewriteFactForJd(cleanedBefore, jdContext);
-          return {
-            ...s,
-            beforeText: cleanedBefore,
-            afterText: after,
-            reasonText: reason
-          };
-        }
 
         return {
           ...s,

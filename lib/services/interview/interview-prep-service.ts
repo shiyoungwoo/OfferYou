@@ -7,6 +7,7 @@ import {
 } from "@/lib/services/applications/application-record-service";
 import { readSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
 import type { ResumeDocument } from "@/lib/document/resume-document";
+import { parseJsonPayload } from "@/lib/services/persistence/json-payload";
 
 export type InterviewQuestionSourceType = "jd" | "snapshot" | "master_fact" | "inferred";
 
@@ -176,7 +177,8 @@ export async function readInterviewPrep(prepId: string): Promise<InterviewPrepRe
     return null;
   }
 
-  return normalizeInterviewPrep(JSON.parse(rows[0].payload_json) as Partial<InterviewPrepRecord>);
+  const parsed = parseJsonPayload<Partial<InterviewPrepRecord>>(rows[0].payload_json, "面试准备");
+  return parsed.ok ? normalizeInterviewPrep(parsed.value) : null;
 }
 
 export async function readInterviewPrepForRecord(recordId: string): Promise<InterviewPrepRecord | null> {
@@ -188,7 +190,8 @@ export async function readInterviewPrepForRecord(recordId: string): Promise<Inte
     return null;
   }
 
-  return normalizeInterviewPrep(JSON.parse(rows[0].payload_json) as Partial<InterviewPrepRecord>);
+  const parsed = parseJsonPayload<Partial<InterviewPrepRecord>>(rows[0].payload_json, "面试准备");
+  return parsed.ok ? normalizeInterviewPrep(parsed.value) : null;
 }
 
 function buildInterviewQuestions(

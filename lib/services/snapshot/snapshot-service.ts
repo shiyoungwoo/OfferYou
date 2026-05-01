@@ -5,6 +5,7 @@ import type { ResumeDocument } from "@/lib/document/resume-document";
 import { estimateResumePageCount, renderResumeDocumentHtml } from "@/lib/services/export/preview-renderer";
 import { measureResumeHtmlPageCount } from "@/lib/services/export/pdf-export-service";
 import { generateFinalResumeDraft } from "@/lib/services/snapshot/final-resume-draft-service";
+import { parseJsonPayload } from "@/lib/services/persistence/json-payload";
 
 export async function generateSnapshotForDraft(draftId: string) {
   const draft = await readWorkspaceDraft(draftId);
@@ -45,7 +46,8 @@ export async function readSnapshotForDraft(draftId: string): Promise<ResumeDocum
     return null;
   }
 
-  return JSON.parse(rows[0].payload_json) as ResumeDocument;
+  const parsed = parseJsonPayload<ResumeDocument>(rows[0].payload_json, "简历快照");
+  return parsed.ok ? parsed.value : null;
 }
 
 export async function saveSnapshotDocument(draftId: string, document: ResumeDocument) {

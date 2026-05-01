@@ -44,6 +44,9 @@ export type SuggestionSeed = {
   revisionRound: number;
   sourceKind: "resume_baseline" | "master_fact" | "target_role_fit" | "revision";
   sourceLabel: string;
+  generationMode?: "model" | "deterministic_fallback";
+  modelProvider?: ModelProviderKey;
+  modelFallbackReason?: string;
 };
 
 // Gemini JSON response shape for suggestions
@@ -85,7 +88,10 @@ export async function generateAISuggestions(
   const provider = options.modelProvider ?? getDefaultModelProvider("rewrite");
 
   if (provider === "deterministic_fallback") {
-    return generateSeedSuggestions(input);
+    return withFallbackReason(
+      generateSeedSuggestions(input),
+      "已按配置使用确定性回退，不调用外部模型。"
+    );
   }
 
   try {
@@ -159,22 +165,28 @@ Resume rewrite rules:
               section: s.section || "experience",
               title: s.title || `AI Suggestion ${i + 1}`,
               beforeText: s.before,
-            afterText: normalizeModelSuggestionAfterText(s.after),
+              afterText: normalizeModelSuggestionAfterText(s.after),
               reasonText: s.reason,
               status: "pending" as const,
               revisionRound: 0,
               sourceKind: "resume_baseline" as const,
-              sourceLabel: getAIRewriteSourceLabel(provider)
+              sourceLabel: getAIRewriteSourceLabel(provider),
+              generationMode: "model" as const,
+              modelProvider: provider
             },
             input
           )
         );
     }
-  } catch {
-    return generateSeedSuggestions(input);
+  } catch (error) {
+    const fallbackReason =
+      error instanceof Error && error.message
+        ? "AI 改写调用失败，已切换到确定性回退。"
+        : "AI 改写调用失败，已切换到确定性回退。";
+    return withFallbackReason(generateSeedSuggestions(input), fallbackReason);
   }
 
-  return generateSeedSuggestions(input);
+  return withFallbackReason(generateSeedSuggestions(input), "模型返回内容为空，已切换到确定性回退。");
 }
 
 /**
@@ -212,10 +224,20 @@ export function generateSeedSuggestions(input: SuggestionSeedInput): SuggestionS
           revisionRound: 0,
           sourceKind: fact.sourceKind ?? "resume_baseline",
           sourceLabel: fact.sourceLabel ?? getDefaultSourceLabel(fact.sourceKind),
+          generationMode: "deterministic_fallback",
+          modelProvider: "deterministic_fallback"
         },
         input
       );
     });
+}
+
+function withFallbackReason(suggestions: SuggestionSeed[], reason: string): SuggestionSeed[] {
+  return suggestions.map((suggestion) => ({
+    ...suggestion,
+    modelFallbackReason: reason,
+    reasonText: `${suggestion.reasonText}；模型降级原因：${reason}`
+  }));
 }
 
 function rankSuggestionCandidate(

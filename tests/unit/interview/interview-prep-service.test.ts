@@ -1,16 +1,24 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { saveWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
-import { generateSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
+import { saveSnapshotDocument } from "@/lib/services/snapshot/snapshot-service";
 import { createApplicationRecord } from "@/lib/services/applications/application-record-service";
 import { readApplicationRecord } from "@/lib/services/applications/application-record-service";
 import {
   createInterviewPrepFromRecord,
+  readInterviewPrep,
   readInterviewPrepForRecord,
   saveInterviewPrep
 } from "@/lib/services/interview/interview-prep-service";
+import { executeSql, sqlString } from "@/lib/db";
+import type { ResumeDocument } from "@/lib/document/resume-document";
+
+vi.mock("@/lib/services/export/pdf-export-service", () => ({
+  measureResumeHtmlPageCount: vi.fn(async () => 1),
+  renderPdfFromHtml: vi.fn()
+}));
 
 let tempDir: string;
 let previousCwd: string;
@@ -68,7 +76,17 @@ describe("interview-prep-service", () => {
       factSubmissions: []
     });
 
-    await generateSnapshotForDraft("draft-1");
+    const snapshot: ResumeDocument = {
+      templateKey: "professional-cn",
+      header: {
+        name: "吴世阳",
+        title: "AI 产品经理",
+        meta: ["手机：18513449520"]
+      },
+      sections: []
+    };
+
+    await saveSnapshotDocument("draft-1", snapshot);
   });
 
   afterEach(async () => {
@@ -120,5 +138,29 @@ describe("interview-prep-service", () => {
     expect(reloaded?.questions[0]?.favorite).toBe(true);
     expect(reloaded?.questions[0]?.answerDraft).toContain("事实");
     expect(reloaded?.selfIntroDraft).toContain("真实经历");
+  });
+
+  it("returns null for corrupted interview prep payloads", async () => {
+    const record = await createApplicationRecord({
+      draftId: "draft-1",
+      exportStoragePath: "/tmp/export.pdf"
+    });
+
+    await executeSql(`
+      INSERT INTO interview_preps (id, application_record_id, payload_json, created_at, updated_at)
+      VALUES (
+        'broken-prep',
+        ${sqlString(record.id)},
+        '{"id":',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      );
+    `);
+
+    const byId = await readInterviewPrep("broken-prep");
+    const byRecord = await readInterviewPrepForRecord(record.id);
+
+    expect(byId).toBeNull();
+    expect(byRecord).toBeNull();
   });
 });

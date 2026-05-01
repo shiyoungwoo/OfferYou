@@ -88,7 +88,7 @@ export async function applySuggestionAction(input: SuggestionActionInput) {
     sourceKind: "revision" as const,
     sourceLabel: `Revision of ${suggestion.sourceLabel}`,
     parentSuggestionId: suggestion.id,
-    revisionRound: suggestion.revisionRound + 1,
+    revisionRound: (suggestion.revisionRound ?? 0) + 1,
     userFeedbackType: input.feedbackType,
     userFeedbackText: input.feedbackText
   };

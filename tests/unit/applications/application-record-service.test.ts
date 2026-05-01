@@ -1,15 +1,22 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createApplicationRecord,
+  listApplicationRecords,
   updateApplicationRecordInterviewPrep
 } from "@/lib/services/applications/application-record-service";
 import { saveWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
-import { generateSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
+import { saveSnapshotDocument } from "@/lib/services/snapshot/snapshot-service";
 import { executeSql } from "@/lib/db";
 import { readApplicationRecord } from "@/lib/services/applications/application-record-service";
+import type { ResumeDocument } from "@/lib/document/resume-document";
+
+vi.mock("@/lib/services/export/pdf-export-service", () => ({
+  measureResumeHtmlPageCount: vi.fn(async () => 1),
+  renderPdfFromHtml: vi.fn()
+}));
 
 let tempDir: string;
 let previousCwd: string;
@@ -67,7 +74,17 @@ describe("createApplicationRecord", () => {
       factSubmissions: []
     });
 
-    await generateSnapshotForDraft("draft-1");
+    const snapshot: ResumeDocument = {
+      templateKey: "professional-cn",
+      header: {
+        name: "吴世阳",
+        title: "AI 产品经理",
+        meta: ["手机：18513449520"]
+      },
+      sections: []
+    };
+
+    await saveSnapshotDocument("draft-1", snapshot);
   });
 
   afterEach(async () => {
@@ -108,6 +125,33 @@ describe("createApplicationRecord", () => {
     expect(record).not.toBeNull();
     expect(record?.interviewStatus).toBe("none");
     expect(record?.interviewPrepId).toBeUndefined();
+  });
+
+  it("returns null for corrupted records and filters them from listings", async () => {
+    const record = await createApplicationRecord({
+      draftId: "draft-1",
+      exportStoragePath: "/tmp/export.pdf"
+    });
+
+    await executeSql(`
+      INSERT INTO application_records (id, draft_id, company, job_title, payload_json, applied_at, created_at)
+      VALUES (
+        'broken-record',
+        'draft-1',
+        'Broken Co',
+        'Broken Role',
+        '{"id":',
+        '2026-04-23T00:00:00.000Z',
+        CURRENT_TIMESTAMP
+      );
+    `);
+
+    const corrupted = await readApplicationRecord("broken-record");
+    const records = await listApplicationRecords();
+
+    expect(corrupted).toBeNull();
+    expect(records).toHaveLength(1);
+    expect(records[0]?.id).toBe(record.id);
   });
 
   it("updates interview prep status on an existing record", async () => {

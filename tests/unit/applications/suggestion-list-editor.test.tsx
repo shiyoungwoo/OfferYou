@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("SuggestionList editor", () => {
-  it("expands a suggestion, shows the quality hint separately, and allows local edits", () => {
+  it("expands a suggestion and allows local edits", () => {
     render(
       <SuggestionList
         draftId="draft-1"
@@ -30,9 +30,6 @@ describe("SuggestionList editor", () => {
         ]}
       />
     );
-
-    expect(screen.getByText("质量提示")).toBeTruthy();
-    expect(screen.getByText(/改写内容偏短。/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));
 

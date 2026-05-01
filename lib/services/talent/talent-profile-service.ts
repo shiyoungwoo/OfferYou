@@ -7,6 +7,7 @@ import {
   type CareerDirectionSummary,
   type CareerNavigationProfile
 } from "@/lib/services/talent/career-navigation";
+import { parseJsonPayload } from "@/lib/services/persistence/json-payload";
 
 export type TalentProfileRecord = {
   id: string;
@@ -73,7 +74,8 @@ export async function getLatestConfirmedTalentProfile(userId: string): Promise<T
     return null;
   }
 
-  return JSON.parse(rows[0].payload_json) as TalentProfileRecord;
+  const parsed = parseJsonPayload<TalentProfileRecord>(rows[0].payload_json, "天赋档案");
+  return parsed.ok ? parsed.value : null;
 }
 
 export async function confirmCareerNavigation(input: {
@@ -126,7 +128,8 @@ export async function getLatestConfirmedCareerNavigation(userId: string): Promis
     return null;
   }
 
-  return JSON.parse(rows[0].payload_json) as CareerNavigationRecord;
+  const parsed = parseJsonPayload<CareerNavigationRecord>(rows[0].payload_json, "职业路径");
+  return parsed.ok ? parsed.value : null;
 }
 
 export async function getLatestConfirmedCareerNavigationForTalentProfile(
@@ -147,7 +150,8 @@ export async function getLatestConfirmedCareerNavigationForTalentProfile(
     return null;
   }
 
-  return JSON.parse(rows[0].payload_json) as CareerNavigationRecord;
+  const parsed = parseJsonPayload<CareerNavigationRecord>(rows[0].payload_json, "职业路径");
+  return parsed.ok ? parsed.value : null;
 }
 
 export function findCareerDirectionBySlug(
@@ -169,5 +173,6 @@ async function getTalentProfileById(id: string): Promise<TalentProfileRecord | n
     return null;
   }
 
-  return JSON.parse(rows[0].payload_json) as TalentProfileRecord;
+  const parsed = parseJsonPayload<TalentProfileRecord>(rows[0].payload_json, "天赋档案");
+  return parsed.ok ? parsed.value : null;
 }
