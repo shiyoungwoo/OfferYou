@@ -1,9 +1,10 @@
 import { callModelJSON } from "@/lib/ai/model-gateway";
 import { getDefaultModelProvider, type ModelProviderKey } from "@/lib/ai/model-provider-config";
-import { checkFactGrounding } from "@/lib/services/quality/fact-grounding";
-import { scoreSuggestionQuality } from "@/lib/services/quality/suggestion-quality";
+import { buildJDInsight, buildRewriteStrategy, selectJDAbilityLabel } from "@/lib/services/analysis/jd-insight";
 import { cleanGeneratedResumeText, normalizeOcrResumeText } from "@/lib/services/analysis/text-cleaner";
 import type { CalibratedResumeProfile } from "@/lib/services/calibration/resume-calibration-types";
+import type { GenerationMode, JDInsight, RewriteStrategy, RewriteVerification } from "@/lib/services/job-apply/agent-run";
+import { verifyRewriteSuggestion } from "@/lib/services/quality/resume-verifier";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -26,6 +27,8 @@ export type SuggestionSeedInput = {
 export type AIGeneratorInput = SuggestionSeedInput & {
   gaps: string[];
   keywordsToBridge: string[];
+  jdInsight?: JDInsight;
+  rewriteStrategy?: RewriteStrategy;
 };
 
 export type SuggestionGenerationOptions = {
@@ -44,9 +47,12 @@ export type SuggestionSeed = {
   revisionRound: number;
   sourceKind: "resume_baseline" | "master_fact" | "target_role_fit" | "revision";
   sourceLabel: string;
-  generationMode?: "model" | "deterministic_fallback";
+  generationMode?: GenerationMode;
   modelProvider?: ModelProviderKey;
   modelFallbackReason?: string;
+  jdAbility?: string;
+  factAnchors?: string[];
+  verification?: RewriteVerification;
 };
 
 // Gemini JSON response shape for suggestions
@@ -58,6 +64,8 @@ type GeminiSuggestionResponse = {
     before: string;
     after: string;
     reason: string;
+    jdAbility?: string;
+    factAnchors?: string[];
   }>;
 };
 
@@ -96,6 +104,8 @@ export async function generateAISuggestions(
 
   try {
     const systemPrompt = loadRewritePrompt();
+    const jdInsight = input.jdInsight ?? buildJDInsight(input);
+    const rewriteStrategy = input.rewriteStrategy ?? buildRewriteStrategy(jdInsight);
 
     const candidates = buildSuggestionCandidates(input);
     const factBlocks = candidates
@@ -118,6 +128,16 @@ ${input.gaps.map((g) => `- ${g}`).join("\n")}
 ## Keywords to Bridge
 ${input.keywordsToBridge.join(", ")}
 
+## JD Insight
+核心能力：${jdInsight.coreAbilities.join("、")}
+硬性要求：${jdInsight.hardRequirements.join("、")}
+加分项：${jdInsight.bonusItems.join("、")}
+避免项：${jdInsight.avoidItems.join("、")}
+
+## Rewrite Strategy
+优先级：${rewriteStrategy.priorities.join("、")}
+弱相关经历处理：保留时间线和真实职责，压缩为 1-2 行，不要强行包装为直接经验。
+
 ${input.talentHeadline ? `## Talent Profile: ${input.talentHeadline}` : ""}
 ${input.selectedCareerDirectionLabel ? `## Career Direction: ${input.selectedCareerDirectionLabel}` : ""}
 
@@ -129,7 +149,9 @@ ${input.selectedCareerDirectionLabel ? `## Career Direction: ${input.selectedCar
       "title": "Short label for this suggestion",
       "before": "The original text from the candidate's block",
       "after": "The optimized rewrite — MUST be a concrete draft of the revised text. Do not provide meta-comments or advice here; provide the actual content.",
-      "reason": "Explain why this change is needed based on specific JD requirements. If the JD requires a skill (e.g. 'Data Analysis') that is missing in this block, state: '【JD 缺失能力提醒】：JD 要求 X，简历未体现，建议补充 Y' followed by the rationale."
+      "reason": "Explain why this change is needed based on specific JD requirements. If the JD requires a skill (e.g. 'Data Analysis') that is missing in this block, state: '【JD 缺失能力提醒】：JD 要求 X，简历未体现，建议补充 Y' followed by the rationale.",
+      "jdAbility": "A concrete JD capability from JD Insight, e.g. AI 工具 / Prompt 应用",
+      "factAnchors": ["Short source facts that support this rewrite"]
     }
   ]
 }
@@ -161,7 +183,7 @@ Resume rewrite rules:
           reviewSuggestion(
             {
               id: `ai-${i + 1}`,
-              candidateId: s.candidateId,
+              candidateId: s.candidateId ?? candidates[i]?.candidateId,
               section: s.section || "experience",
               title: s.title || `AI Suggestion ${i + 1}`,
               beforeText: s.before,
@@ -171,13 +193,24 @@ Resume rewrite rules:
               revisionRound: 0,
               sourceKind: "resume_baseline" as const,
               sourceLabel: getAIRewriteSourceLabel(provider),
-              generationMode: "model" as const,
-              modelProvider: provider
+              generationMode: result.generationMode ?? "model",
+              modelProvider: provider,
+              jdAbility: s.jdAbility ?? selectJDAbilityLabel({ text: `${s.after} ${s.reason}`, jdInsight }),
+              factAnchors: Array.isArray(s.factAnchors) ? s.factAnchors : deriveFactAnchors(s.before)
             },
-            input
+            {
+              ...input,
+              jdInsight,
+              rewriteStrategy
+            }
           )
         );
     }
+
+    return withFallbackReason(
+      generateSeedSuggestions(input),
+      result.fallbackReason ?? "模型返回内容为空，已切换到确定性回退。"
+    );
   } catch (error) {
     const fallbackReason =
       error instanceof Error && error.message
@@ -185,8 +218,6 @@ Resume rewrite rules:
         : "AI 改写调用失败，已切换到确定性回退。";
     return withFallbackReason(generateSeedSuggestions(input), fallbackReason);
   }
-
-  return withFallbackReason(generateSeedSuggestions(input), "模型返回内容为空，已切换到确定性回退。");
 }
 
 /**
@@ -225,7 +256,14 @@ export function generateSeedSuggestions(input: SuggestionSeedInput): SuggestionS
           sourceKind: fact.sourceKind ?? "resume_baseline",
           sourceLabel: fact.sourceLabel ?? getDefaultSourceLabel(fact.sourceKind),
           generationMode: "deterministic_fallback",
-          modelProvider: "deterministic_fallback"
+          modelProvider: "deterministic_fallback",
+          jdAbility: selectJDAbilityLabel({
+            text: `${cleanedAfter} ${rewrite.reason}`,
+            jdInsight: buildJDInsight({
+              jdText: input.jdText
+            }),
+          }),
+          factAnchors: deriveFactAnchors(fact.text)
         },
         input
       );
@@ -236,7 +274,8 @@ function withFallbackReason(suggestions: SuggestionSeed[], reason: string): Sugg
   return suggestions.map((suggestion) => ({
     ...suggestion,
     modelFallbackReason: reason,
-    reasonText: `${suggestion.reasonText}；模型降级原因：${reason}`
+    generationMode: "deterministic_fallback",
+    modelProvider: "deterministic_fallback"
   }));
 }
 
@@ -257,19 +296,14 @@ function rankSuggestionCandidate(
   };
 }
 
-function reviewSuggestion(suggestion: SuggestionSeed, input: SuggestionSeedInput): SuggestionSeed {
-  const keywords = "keywordsToBridge" in input ? ((input as AIGeneratorInput).keywordsToBridge as string[]) : extractKeywords(input.jdText);
-  const quality = scoreSuggestionQuality({
-    beforeText: suggestion.beforeText,
-    afterText: suggestion.afterText,
-    reasonText: suggestion.reasonText,
-    keywords
-  });
-  const grounding = checkFactGrounding({
+function reviewSuggestion(suggestion: SuggestionSeed, input: SuggestionSeedInput | AIGeneratorInput): SuggestionSeed {
+  const jdInsight = "jdInsight" in input ? (input as AIGeneratorInput).jdInsight : undefined;
+  const verification = verifyRewriteSuggestion({
     beforeText: suggestion.beforeText,
     afterText: suggestion.afterText,
     reasonText: suggestion.reasonText,
     jdText: input.jdText,
+    jdInsight,
     company: input.company,
     jobTitle: input.jobTitle,
     masterFacts: input.facts.map((fact) => ({
@@ -282,14 +316,15 @@ function reviewSuggestion(suggestion: SuggestionSeed, input: SuggestionSeedInput
       .join("\n")
   });
 
-  const notes = [...quality.notes, ...grounding.riskNotes];
-  if (notes.length === 0) {
-    return suggestion;
-  }
-
   return {
     ...suggestion,
-    reasonText: `${suggestion.reasonText}；质量提示：${notes.join("；")}`
+    jdAbility: suggestion.jdAbility ?? selectJDAbilityLabel({
+      text: `${suggestion.afterText} ${suggestion.reasonText}`,
+      jdInsight,
+      fallback: extractKeywords(input.jdText)[0]
+    }),
+    factAnchors: suggestion.factAnchors?.length ? suggestion.factAnchors : deriveFactAnchors(suggestion.beforeText),
+    verification
   };
 }
 
@@ -299,6 +334,14 @@ function extractKeywords(text: string) {
     .map((keyword) => keyword.trim())
     .filter((keyword) => keyword.length >= 2)
     .slice(0, 8);
+}
+
+function deriveFactAnchors(text: string) {
+  return text
+    .split(/[\n。；;]+/u)
+    .map((line) => cleanGeneratedResumeText(line).trim())
+    .filter((line) => line.length >= 6)
+    .slice(0, 3);
 }
 
 // ─── Deterministic helpers (unchanged) ───

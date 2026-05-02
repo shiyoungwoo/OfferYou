@@ -531,6 +531,10 @@ function normalizeSectionKey(section: string) {
 }
 
 function getJdCapabilityLabel(suggestion: WorkspaceSuggestion) {
+  if (suggestion.jdAbility?.trim()) {
+    return `对应：${suggestion.jdAbility.trim()}`;
+  }
+
   const text = `${suggestion.title} ${suggestion.beforeText} ${suggestion.afterText} ${suggestion.reasonText}`.toLowerCase();
 
   if (/prompt|提示词|llm|大模型|ai 工具|ai工具|agent/u.test(text)) return "对应：AI 工具 / Prompt 应用";

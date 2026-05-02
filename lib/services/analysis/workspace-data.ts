@@ -1,6 +1,7 @@
 import { readWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import { cleanGeneratedResumeText, normalizeOcrResumeText } from "@/lib/services/analysis/text-cleaner";
 import type { CalibratedResumeProfile } from "@/lib/services/calibration/resume-calibration-types";
+import type { GenerationMode, JDInsight, RewriteStrategy, RewriteVerification } from "@/lib/services/job-apply/agent-run";
 
 export type WorkspaceSummary = {
   fitScore: number;
@@ -28,9 +29,12 @@ export type WorkspaceSuggestion = {
   status: "pending" | "accepted" | "rejected";
   sourceKind: "resume_baseline" | "master_fact" | "target_role_fit" | "revision";
   sourceLabel: string;
-  generationMode?: "model" | "deterministic_fallback";
+  generationMode?: GenerationMode;
   modelProvider?: "gemini" | "openai_compatible" | "deterministic_fallback";
   modelFallbackReason?: string;
+  jdAbility?: string;
+  factAnchors?: string[];
+  verification?: RewriteVerification;
   revisionRound?: number;
   parentSuggestionId?: string;
   userFeedbackType?: string;
@@ -70,6 +74,8 @@ export type WorkspaceData = {
   snapshot: WorkspaceSnapshotOutline;
   factSubmissionCount?: number;
   calibratedResume?: CalibratedResumeProfile;
+  jdInsight?: JDInsight;
+  rewriteStrategy?: RewriteStrategy;
 };
 
 export async function getAnalysisWorkspaceData(draftId: string): Promise<WorkspaceData> {
@@ -93,6 +99,8 @@ export async function getAnalysisWorkspaceData(draftId: string): Promise<Workspa
       talentProfileUsed: persisted.talentProfileUsed,
       careerDirectionUsed: persisted.careerDirectionUsed,
       calibratedResume: persisted.calibratedResume,
+      jdInsight: persisted.jdInsight,
+      rewriteStrategy: persisted.rewriteStrategy,
       masterFactsUsed: persisted.masterFactsUsed ?? [],
       suggestions: persisted.suggestions.map((s) => {
         const cleanedBefore =

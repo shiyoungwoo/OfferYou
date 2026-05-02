@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import { estimateResumePageCount, getResumePageWaterLabel } from "@/lib/services/export/preview-renderer";
-import type { ResumeDocument } from "@/lib/document/resume-document";
+import { normalizeResumeTemplateKey, type ResumeDocument } from "@/lib/document/resume-document";
 
 type ExportPdfButtonProps = {
   draftId: string;
@@ -20,13 +20,19 @@ export function ExportPdfButton({ draftId, document }: ExportPdfButtonProps) {
     startTransition(async () => {
       setStatusMessage(null);
       setRecordPath(null);
+      const exportDocument = document
+        ? {
+            ...document,
+            templateKey: normalizeResumeTemplateKey(document.templateKey)
+          }
+        : undefined;
 
       const response = await fetch(`/api/drafts/${draftId}/export`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(document ? { document } : {})
+        body: JSON.stringify(exportDocument ? { document: exportDocument, templateKey: exportDocument.templateKey } : {})
       });
 
       const payload = (await response.json()) as {

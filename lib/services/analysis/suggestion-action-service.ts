@@ -87,6 +87,12 @@ export async function applySuggestionAction(input: SuggestionActionInput) {
     status: "pending" as const,
     sourceKind: "revision" as const,
     sourceLabel: `Revision of ${suggestion.sourceLabel}`,
+    candidateId: suggestion.candidateId,
+    jdAbility: suggestion.jdAbility,
+    factAnchors: suggestion.factAnchors,
+    verification: suggestion.verification,
+    generationMode: suggestion.generationMode,
+    modelProvider: suggestion.modelProvider,
     parentSuggestionId: suggestion.id,
     revisionRound: (suggestion.revisionRound ?? 0) + 1,
     userFeedbackType: input.feedbackType,
@@ -118,32 +124,32 @@ export async function applySuggestionAction(input: SuggestionActionInput) {
 
 function reviseAfterText(afterText: string, feedbackType?: SuggestionActionInput["feedbackType"], feedbackText?: string) {
   if (feedbackType === "too_generic") {
-    return `${afterText} Make the impact more concrete and specific.`;
+    return `${afterText}\n请把结果、动作和证据写得更具体，但不要新增未经确认的事实。`;
   }
 
   if (feedbackType === "too_aggressive") {
-    return `${afterText} Reduce claim intensity and stay closer to the original evidence.`;
+    return `${afterText}\n请降低表述强度，更贴近原始经历中的可核验事实。`;
   }
 
   if (feedbackType === "adding_new_fact" && feedbackText) {
-    return `${afterText} Integrate the new confirmed source material once it passes fact review: ${feedbackText}`;
+    return `${afterText}\n待事实确认后，可补入这条新材料：${feedbackText}`;
   }
 
   if (feedbackText) {
-    return `${afterText} Revision note: ${feedbackText}`;
+    return `${afterText}\n微调要求：${feedbackText}`;
   }
 
-  return `${afterText} Revise the phrasing while keeping the evidence unchanged.`;
+  return `${afterText}\n请在不改变事实的前提下，调整为更适合投递的表达。`;
 }
 
 function buildRevisionReason(feedbackType?: SuggestionActionInput["feedbackType"], feedbackText?: string) {
   if (feedbackType && feedbackText) {
-    return `Revision requested due to ${feedbackType}: ${feedbackText}`;
+    return `用户要求微调：${feedbackType}，补充说明：${feedbackText}`;
   }
 
   if (feedbackType) {
-    return `Revision requested due to ${feedbackType}.`;
+    return `用户要求微调：${feedbackType}。`;
   }
 
-  return "Revision requested by user feedback.";
+  return "用户要求继续微调。";
 }

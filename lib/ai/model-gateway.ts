@@ -1,5 +1,5 @@
-import { callGemini, callGeminiJSON } from "@/lib/ai/gemini-client";
-import { callOpenAICompatible, callOpenAICompatibleJSON, hasOpenAICompatibleConfig } from "@/lib/ai/openai-compatible-client";
+import { callGemini } from "@/lib/ai/gemini-client";
+import { callOpenAICompatible, hasOpenAICompatibleConfig } from "@/lib/ai/openai-compatible-client";
 import {
   getAvailableModelProviders as getConfiguredModelProviders,
   getDefaultModelProvider,
@@ -8,6 +8,7 @@ import {
   type ModelProviderKey
 } from "@/lib/ai/model-provider-config";
 import type { ModelTaskKey } from "@/lib/ai/model-task-config";
+import type { GenerationMode, ModelProviderTrace } from "@/lib/services/job-apply/agent-run";
 
 export type ModelCallTextOptions = {
   systemPrompt: string;
@@ -28,6 +29,8 @@ export type ModelCallJsonOptions<T> = {
 export type ModelCallResult<T> = {
   provider: ModelProviderKey;
   data: T | null;
+  generationMode?: GenerationMode;
+  trace?: ModelProviderTrace;
   fallbackReason?: string;
 };
 
@@ -37,80 +40,287 @@ export function getAvailableModelProviders() {
 
 export async function callModelText(options: ModelCallTextOptions): Promise<ModelCallResult<string>> {
   const provider = options.provider ?? getDefaultModelProvider(options.task);
+  const startedAt = Date.now();
   const geminiAvailable = hasGeminiApiKey();
   const openAICompatibleAvailable = hasOpenAICompatibleConfig();
 
   if (provider === "deterministic_fallback" || (!geminiAvailable && provider === "gemini") || (!openAICompatibleAvailable && provider === "openai_compatible")) {
+    const fallbackReason = getUnavailableProviderReason(provider, geminiAvailable, openAICompatibleAvailable);
     return {
       provider: "deterministic_fallback",
       data: options.fallbackFactory ? options.fallbackFactory() : null,
-      fallbackReason: getUnavailableProviderReason(provider, geminiAvailable, openAICompatibleAvailable)
+      generationMode: "deterministic_fallback",
+      trace: buildProviderTrace({
+        provider: "deterministic_fallback",
+        task: options.task,
+        startedAt,
+        generationMode: "deterministic_fallback",
+        fallbackReason
+      }),
+      fallbackReason
     };
   }
 
   try {
-    const data =
-      provider === "openai_compatible"
-        ? await callOpenAICompatible({
-            systemPrompt: options.systemPrompt,
-            userPrompt: options.userPrompt
-          })
-        : await callGemini({
-            systemPrompt: options.systemPrompt,
-            userPrompt: options.userPrompt
-          });
+    const data = await callProviderText(provider, {
+      systemPrompt: options.systemPrompt,
+      userPrompt: options.userPrompt
+    });
 
-    return { provider, data };
+    return {
+      provider,
+      data,
+      generationMode: "model",
+      trace: buildProviderTrace({
+        provider,
+        task: options.task,
+        startedAt,
+        generationMode: "model"
+      })
+    };
   } catch (error) {
+    const fallbackReason = formatModelFailureReason(provider, error);
     return {
       provider: "deterministic_fallback",
       data: options.fallbackFactory ? options.fallbackFactory() : null,
-      fallbackReason: formatModelFailureReason(provider, error)
+      generationMode: "deterministic_fallback",
+      trace: buildProviderTrace({
+        provider: "deterministic_fallback",
+        task: options.task,
+        startedAt,
+        generationMode: "deterministic_fallback",
+        fallbackReason
+      }),
+      fallbackReason
     };
   }
 }
 
 export async function callModelJSON<T>(options: ModelCallJsonOptions<T>): Promise<ModelCallResult<T>> {
   const provider = options.provider ?? getDefaultModelProvider(options.task);
+  const startedAt = Date.now();
   const geminiAvailable = hasGeminiApiKey();
   const openAICompatibleAvailable = hasOpenAICompatibleConfig();
 
   if (provider === "deterministic_fallback" || (!geminiAvailable && provider === "gemini") || (!openAICompatibleAvailable && provider === "openai_compatible")) {
+    const fallbackReason = getUnavailableProviderReason(provider, geminiAvailable, openAICompatibleAvailable);
     return {
       provider: "deterministic_fallback",
       data: options.fallbackFactory ? options.fallbackFactory() : null,
-      fallbackReason: getUnavailableProviderReason(provider, geminiAvailable, openAICompatibleAvailable)
+      generationMode: "deterministic_fallback",
+      trace: buildProviderTrace({
+        provider: "deterministic_fallback",
+        task: options.task,
+        startedAt,
+        generationMode: "deterministic_fallback",
+        fallbackReason
+      }),
+      fallbackReason
     };
   }
 
   try {
-    const data =
-      provider === "openai_compatible"
-        ? await callOpenAICompatibleJSON<T>({
-            systemPrompt: options.systemPrompt,
-            userPrompt: options.userPrompt
-          })
-        : await callGeminiJSON<T>({
-            systemPrompt: options.systemPrompt,
-            userPrompt: options.userPrompt
-          });
+    const rawText = await callProviderText(provider, {
+      systemPrompt: options.systemPrompt,
+      userPrompt: options.userPrompt,
+      jsonMode: true
+    });
+    const parsed = parseLooseJSON<T>(rawText);
 
-    if (!data) {
+    if (parsed.ok) {
       return {
-        provider: "deterministic_fallback",
-        data: options.fallbackFactory ? options.fallbackFactory() : null,
-        fallbackReason: getJsonParseFallbackReason(provider)
+        provider,
+        data: parsed.value,
+        generationMode: "model",
+        trace: buildProviderTrace({
+          provider,
+          task: options.task,
+          startedAt,
+          generationMode: "model"
+        })
       };
     }
 
-    return { provider, data };
-  } catch (error) {
+    const repaired = await repairProviderJSON<T>(provider, rawText, options);
+    if (repaired.ok) {
+      return {
+        provider,
+        data: repaired.value,
+        generationMode: "model_repaired",
+        trace: buildProviderTrace({
+          provider,
+          task: options.task,
+          startedAt,
+          generationMode: "model_repaired"
+        })
+      };
+    }
+
+    const fallbackReason = getJsonParseFallbackReason(provider);
     return {
       provider: "deterministic_fallback",
       data: options.fallbackFactory ? options.fallbackFactory() : null,
-      fallbackReason: formatModelFailureReason(provider, error)
+      generationMode: "deterministic_fallback",
+      trace: buildProviderTrace({
+        provider: "deterministic_fallback",
+        task: options.task,
+        startedAt,
+        generationMode: "deterministic_fallback",
+        fallbackReason
+      }),
+      fallbackReason
+    };
+  } catch (error) {
+    const fallbackReason = formatModelFailureReason(provider, error);
+    return {
+      provider: "deterministic_fallback",
+      data: options.fallbackFactory ? options.fallbackFactory() : null,
+      generationMode: "deterministic_fallback",
+      trace: buildProviderTrace({
+        provider: "deterministic_fallback",
+        task: options.task,
+        startedAt,
+        generationMode: "deterministic_fallback",
+        fallbackReason
+      }),
+      fallbackReason
     };
   }
+}
+
+async function callProviderText(
+  provider: Exclude<ModelProviderKey, "deterministic_fallback">,
+  options: {
+    systemPrompt: string;
+    userPrompt: string;
+    jsonMode?: boolean;
+  }
+) {
+  if (provider === "openai_compatible") {
+    return callOpenAICompatible(options);
+  }
+
+  return callGemini(options);
+}
+
+async function repairProviderJSON<T>(
+  provider: Exclude<ModelProviderKey, "deterministic_fallback">,
+  rawText: string,
+  options: ModelCallJsonOptions<T>
+): Promise<{ ok: true; value: T } | { ok: false }> {
+  const repairedText = await callProviderText(provider, {
+    systemPrompt: "你是 JSON 修复器。只返回合法 JSON，不要解释，不要输出 Markdown。",
+    userPrompt: [
+      "下面是一次模型输出，内容不是合法 JSON。",
+      "请在不新增事实、不改变字段含义的前提下，修复为合法 JSON。",
+      "原始系统要求：",
+      options.systemPrompt,
+      "原始用户要求：",
+      options.userPrompt,
+      "待修复内容：",
+      rawText
+    ].join("\n\n"),
+    jsonMode: true
+  });
+
+  return parseLooseJSON<T>(repairedText);
+}
+
+function parseLooseJSON<T>(text: string): { ok: true; value: T } | { ok: false } {
+  const jsonText = extractFirstJsonValue(stripMarkdown(text));
+  if (!jsonText) {
+    return { ok: false };
+  }
+
+  try {
+    return { ok: true, value: JSON.parse(jsonText) as T };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function stripMarkdown(text: string) {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
+  if (fenced?.[1]) {
+    return fenced[1].trim();
+  }
+
+  const fencedLoose = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/iu);
+  return fencedLoose?.[1]?.trim() ?? trimmed;
+}
+
+function extractFirstJsonValue(text: string) {
+  const source = text.trim();
+  const start = source.search(/[\[{]/u);
+  if (start === -1) return null;
+
+  const open = source[start];
+  const close = open === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = inString;
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === open) {
+      depth += 1;
+    } else if (char === close) {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(start, index + 1).trim();
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildProviderTrace(input: {
+  provider: ModelProviderKey;
+  task?: ModelTaskKey;
+  startedAt: number;
+  generationMode: GenerationMode;
+  fallbackReason?: string;
+}): ModelProviderTrace {
+  return {
+    provider: input.provider,
+    model: getConfiguredModelName(input.provider),
+    task: input.task,
+    generationMode: input.generationMode,
+    latencyMs: Math.max(0, Date.now() - input.startedAt),
+    fallbackReason: input.fallbackReason
+  };
+}
+
+function getConfiguredModelName(provider: ModelProviderKey) {
+  if (provider === "gemini") {
+    return process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  }
+
+  if (provider === "openai_compatible") {
+    return process.env.OPENAI_MODEL ?? process.env.MIMO_MODEL ?? "";
+  }
+
+  return "deterministic_fallback";
 }
 
 function getUnavailableProviderReason(

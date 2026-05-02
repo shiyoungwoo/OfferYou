@@ -214,6 +214,16 @@ function buildInterviewQuestions(
     answerDraft: ""
   });
 
+  for (const ability of (input.draft.jdInsight?.coreAbilities ?? []).slice(0, 3)) {
+    questions.push({
+      questionText: `JD 里要求「${ability}」，请用已确认简历快照中的事实说明匹配度。`,
+      sourceType: "jd",
+      sourceRef: ability,
+      favorite: false,
+      answerDraft: ""
+    });
+  }
+
   if (strengths.length > 0) {
     questions.push({
       questionText: `请说明简历里最能支撑 ${input.record.jobTitle} 的一条优势，并结合事实展开。`,
@@ -287,16 +297,51 @@ function buildSelfIntroDraft(input: {
   const firstStrength = input.draft.analysis?.strengths?.[0];
   const facts = input.draft.masterFactsUsed ?? [];
   const leadingFact = facts[0];
+  const snapshotEvidence = extractSnapshotLeadEvidence(input.snapshot);
+  const leadAbility = input.draft.jdInsight?.coreAbilities?.[0];
   const name = input.snapshot?.header.name ?? "OfferYou 用户";
 
   const lines = [
     `我是 ${name}，最近主要在把真实经历整理成可投递、可解释的岗位快照。`,
-    firstStrength ? `我的一个核心优势是：${trimSentence(firstStrength)}。` : `我会优先把最能支撑目标岗位的经历讲清楚。`,
-    leadingFact ? `例如，我会用「${leadingFact.title}」这类事实来说明我能做成什么。` : `我会用真实事实和清晰结果来证明自己。`,
+    leadAbility ? `这次岗位最需要的能力之一是「${leadAbility}」，我会围绕这条主线说明匹配度。` : firstStrength ? `我的一个核心优势是：${trimSentence(firstStrength)}。` : `我会优先把最能支撑目标岗位的经历讲清楚。`,
+    snapshotEvidence ? `例如，已确认简历快照中有「${snapshotEvidence}」这类证据。` : leadingFact ? `例如，我会用「${leadingFact.title}」这类事实来说明我能做成什么。` : `我会用真实事实和清晰结果来证明自己。`,
     `这次我关注 ${input.company} 的 ${input.jobTitle}，因为这份岗位和我当前的能力主线匹配。`
   ];
 
   return lines.join("\n");
+}
+
+function extractSnapshotLeadEvidence(snapshot: ResumeDocument | null) {
+  if (!snapshot) {
+    return "";
+  }
+
+  for (const section of snapshot.sections) {
+    for (const item of section.items) {
+      if (item.type === "text" && item.text.trim()) {
+        return trimLongEvidence(item.text);
+      }
+
+      if (item.type === "entry") {
+        const parts = [
+          item.heading,
+          item.summary,
+          ...(item.bullets ?? [])
+        ].filter(Boolean);
+
+        if (parts.length > 0) {
+          return trimLongEvidence(parts.join("，"));
+        }
+      }
+    }
+  }
+
+  return "";
+}
+
+function trimLongEvidence(text: string) {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  return cleaned.length > 48 ? `${cleaned.slice(0, 48)}...` : cleaned;
 }
 
 function dedupeQuestions(questions: Array<Omit<InterviewQuestion, "id">>) {

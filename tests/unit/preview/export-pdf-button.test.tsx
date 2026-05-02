@@ -79,7 +79,57 @@ describe("ExportPdfButton", () => {
                 meta: []
               },
               sections: []
-            }
+            },
+            templateKey: "professional-cn"
+          })
+        })
+      );
+    });
+  });
+
+  it("sends the selected ATS Clean template explicitly when exporting", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        storagePath: "/tmp/resume.pdf",
+        recordPath: "/applications/draft-1/record"
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ExportPdfButton
+        document={{
+          templateKey: "ats-clean",
+          header: {
+            name: "王小明",
+            title: "产品经理",
+            meta: []
+          },
+          sections: []
+        }}
+        draftId="draft-1"
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "确认内容并导出 PDF" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/drafts/draft-1/export",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            document: {
+              templateKey: "ats-clean",
+              header: {
+                name: "王小明",
+                title: "产品经理",
+                meta: []
+              },
+              sections: []
+            },
+            templateKey: "ats-clean"
           })
         })
       );

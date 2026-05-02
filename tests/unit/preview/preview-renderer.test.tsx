@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { TemplateProfessionalCN } from "@/components/preview/template-professional-cn";
-import { buildResumePdfFilename, estimateResumePageCount, getHeaderInfo, getResumePageWaterLabel } from "@/lib/services/export/preview-renderer";
+import { buildResumePdfFilename, estimateResumePageCount, getHeaderInfo, getResumePageWaterLabel, renderResumeDocumentHtml } from "@/lib/services/export/preview-renderer";
 
 describe("TemplateProfessionalCN", () => {
   it("renders section headings from ResumeDocument", () => {
@@ -84,5 +84,29 @@ describe("TemplateProfessionalCN", () => {
     };
 
     expect(getHeaderInfo(document)).toEqual(["手机：13800000000", "英语：CET-6"]);
+  });
+
+  it("renders ATS Clean export HTML when the document template is ATS Clean", () => {
+    const html = renderResumeDocumentHtml({
+      templateKey: "ats-clean",
+      header: {
+        name: "王小明",
+        title: "AI 产品经理",
+        meta: [],
+        contacts: ["手机：13800000000", "邮箱：user@example.com"]
+      },
+      sections: [
+        {
+          id: "projects",
+          title: "项目经历",
+          items: [{ type: "text", text: "OfferYou 项目经历" }]
+        }
+      ]
+    });
+
+    expect(html).toContain('data-template-key="ats-clean"');
+    expect(html).toContain('class="contact-grid"');
+    expect(html).toContain('<div class="role">AI 产品经理</div>');
+    expect(html).not.toContain("求职意向：AI 产品经理");
   });
 });

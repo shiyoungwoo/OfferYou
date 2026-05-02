@@ -1,4 +1,4 @@
-import type { ResumeDocument, ResumeDocumentSection } from "@/lib/document/resume-document";
+import { normalizeResumeTemplateKey, type ResumeDocument, type ResumeDocumentSection } from "@/lib/document/resume-document";
 
 const MAX_ITEMS_PER_PAGE = 14;
 const PDF_FILENAME_FORBIDDEN_CHARS = /[\/\\:*?"<>|]/g;
@@ -65,12 +65,17 @@ export function buildResumePdfFilename(document: ResumeDocument) {
 }
 
 export function renderResumeDocumentHtml(document: ResumeDocument) {
+  const templateKey = normalizeResumeTemplateKey(document.templateKey);
+  return templateKey === "ats-clean" ? renderAtsCleanHtml(document) : renderProfessionalCnHtml(document);
+}
+
+function renderProfessionalCnHtml(document: ResumeDocument) {
   const renderableSections = getContentSections(getRenderableSections(document.sections));
   const headerInfo = getHeaderInfo(document);
   const sections = renderableSections.map((section) => renderSection(section)).join("");
 
   const body = `
-      <article>
+      <article data-template-key="professional-cn">
         <header class="resume-header">
           <h2>${escapeHtml(document.header.name)}</h2>
           ${headerInfo.length > 0 ? `<div class="contact-bar">${headerInfo.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
@@ -310,9 +315,228 @@ export function renderResumeDocumentHtml(document: ResumeDocument) {
 </html>`;
 }
 
-function renderSection(section: ResumeDocumentSection) {
+function renderAtsCleanHtml(document: ResumeDocument) {
+  const renderableSections = getContentSections(getRenderableSections(document.sections));
+  const headerInfo = getHeaderInfo(document);
+  const sections = renderableSections.map((section, index) => renderSection(section, index === 0 ? "first" : "standard")).join("");
+
+  const body = `
+      <article data-template-key="ats-clean">
+        <header class="resume-header">
+          <div class="identity-block">
+            <h2>${escapeHtml(document.header.name)}</h2>
+            ${document.header.title ? `<div class="role">${escapeHtml(document.header.title)}</div>` : ""}
+          </div>
+          ${
+            headerInfo.length > 0
+              ? `<div class="contact-grid">${headerInfo.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>`
+              : ""
+          }
+        </header>
+        <div class="resume-sections">${sections}</div>
+      </article>`;
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(document.header.name)}</title>
+    <style>
+      :root {
+        --text-dark: #111827;
+        --text-gray: #4B5563;
+        --text-soft: #64748B;
+        --divider: #CBD5E1;
+        --divider-soft: #E2E8F0;
+        color-scheme: light;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        margin: 0;
+        background: #f8fafc;
+        color: var(--text-dark);
+        font-family: "Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        font-size: 10pt;
+      }
+      .print-shell {
+        padding: 24px 16px;
+      }
+      article {
+        width: 794px;
+        min-height: 1123px;
+        margin: 0 auto;
+        background: white;
+        border: 1px solid #dce0e5;
+        border-radius: 6px;
+        padding: 28px 34px;
+        box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08);
+      }
+
+      .resume-header {
+        display: grid;
+        grid-template-columns: minmax(190px, 0.45fr) minmax(500px, 1fr);
+        gap: 24px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid var(--text-dark);
+        margin-bottom: 12px;
+        text-align: left;
+      }
+      h2 {
+        font-size: 29px;
+        font-weight: 800;
+        line-height: 1;
+        color: var(--text-dark);
+        letter-spacing: 0.04em;
+      }
+      .role {
+        width: fit-content;
+        margin-top: 16px;
+        padding: 0 64px 4px 0;
+        border-bottom: 1px solid var(--divider);
+        font-size: 20px;
+        font-weight: 700;
+        line-height: 1.15;
+        color: #334155;
+      }
+      .contact-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-content: start;
+        justify-items: start;
+        gap: 6px 20px;
+        border-left: 1px solid var(--divider);
+        padding-left: 20px;
+        padding-top: 4px;
+        font-size: 10px;
+        line-height: 1.25;
+        color: var(--text-gray);
+        text-align: left;
+      }
+      .contact-grid span {
+        max-width: 100%;
+        white-space: nowrap;
+      }
+
+      .resume-sections {
+        display: flex;
+        flex-direction: column;
+      }
+      section {
+        break-inside: avoid;
+        padding: 6px 0;
+      }
+      section:not(.first) {
+        border-top: 1px solid var(--divider-soft);
+      }
+      h3 {
+        margin-bottom: 6px;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-gray);
+      }
+      section ul {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        list-style: none;
+      }
+      .text-item {
+        font-size: 12px;
+        line-height: 1.5;
+        color: #334155;
+      }
+      .entry {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .entry-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .flex.items-baseline {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        min-width: 0;
+      }
+      .entry-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-dark);
+      }
+      .entry-subtitle {
+        font-size: 11.5px;
+        color: var(--text-soft);
+      }
+      .entry-subtitle::before {
+        content: "｜ ";
+        color: var(--divider);
+      }
+      .entry-meta {
+        flex-shrink: 0;
+        font-size: 11.5px;
+        font-weight: 500;
+        color: var(--text-soft);
+        white-space: nowrap;
+      }
+      .entry-bullets {
+        margin: 2px 0 0 0;
+        padding-left: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        list-style: disc;
+      }
+      .entry-bullets li {
+        font-size: 11.5px;
+        line-height: 1.42;
+        color: var(--text-gray);
+      }
+      .entry-bullets li::marker {
+        color: #94A3B8;
+        font-size: 8px;
+      }
+
+      @page {
+        size: A4;
+        margin: 0;
+      }
+      @media print {
+        html, body {
+          width: 210mm;
+          min-height: 297mm;
+          background: white;
+        }
+        .print-shell { padding: 0; }
+        article {
+          width: 210mm;
+          min-height: 297mm;
+          margin: 0;
+          border: 0;
+          border-radius: 0;
+          box-shadow: none;
+          padding: 10mm 13mm 10mm 13mm;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="print-shell">${body}</div>
+  </body>
+</html>`;
+}
+
+function renderSection(section: ResumeDocumentSection, className = "standard") {
   return `
-    <section class="${section.tone ?? "standard"}">
+    <section class="${className} ${section.tone ?? "standard"}">
       <h3>${escapeHtml(section.title)}</h3>
       <ul>
         ${section.items

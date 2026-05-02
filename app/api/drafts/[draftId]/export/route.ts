@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { ResumeDocument } from "@/lib/document/resume-document";
+import type { ResumeDocument, ResumeTemplateKey } from "@/lib/document/resume-document";
 import { exportResumeDocumentForDraft } from "@/lib/services/export/resume-export-service";
 
 export async function POST(
@@ -11,12 +11,16 @@ export async function POST(
   }
 ) {
   const { draftId } = await context.params;
-  const payload = (await request.json().catch(() => ({}))) as { document?: ResumeDocument };
+  const payload = (await request.json().catch(() => ({}))) as {
+    document?: ResumeDocument;
+    templateKey?: ResumeTemplateKey;
+  };
 
   try {
     const result = await exportResumeDocumentForDraft({
       draftId,
-      document: payload.document
+      document: payload.document,
+      templateKey: payload.templateKey
     });
 
     return NextResponse.json(result);

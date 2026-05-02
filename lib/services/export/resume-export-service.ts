@@ -1,4 +1,4 @@
-import type { ResumeDocument } from "@/lib/document/resume-document";
+import { normalizeResumeTemplateKey, type ResumeDocument, type ResumeTemplateKey } from "@/lib/document/resume-document";
 import { getDefaultUserContext } from "@/lib/default-user";
 import { createApplicationRecord } from "@/lib/services/applications/application-record-service";
 import { renderPdfFromHtml } from "@/lib/services/export/pdf-export-service";
@@ -8,17 +8,23 @@ import { readSnapshotForDraft, saveSnapshotDocument } from "@/lib/services/snaps
 export type ExportResumeDocumentInput = {
   draftId: string;
   document?: ResumeDocument;
+  templateKey?: ResumeTemplateKey;
 };
 
 export async function exportResumeDocumentForDraft(input: ExportResumeDocumentInput) {
-  const snapshot = input.document ?? (await readSnapshotForDraft(input.draftId));
+  const sourceDocument = input.document ?? (await readSnapshotForDraft(input.draftId));
 
-  if (!snapshot) {
+  if (!sourceDocument) {
     throw new Error("Snapshot not found.");
   }
 
-  if (input.document) {
-    await saveSnapshotDocument(input.draftId, input.document);
+  const snapshot: ResumeDocument = {
+    ...sourceDocument,
+    templateKey: normalizeResumeTemplateKey(input.templateKey ?? sourceDocument.templateKey)
+  };
+
+  if (input.document || input.templateKey) {
+    await saveSnapshotDocument(input.draftId, snapshot);
   }
 
   const html = renderResumeDocumentHtml(snapshot);

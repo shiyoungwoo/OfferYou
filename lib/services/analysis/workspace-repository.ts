@@ -1,5 +1,6 @@
 import { executeSql, querySql, sqlString } from "@/lib/db";
 import type { CalibratedResumeProfile } from "@/lib/services/calibration/resume-calibration-types";
+import type { GenerationMode, JDInsight, RewriteStrategy, RewriteVerification } from "@/lib/services/job-apply/agent-run";
 import { parseJsonPayload } from "@/lib/services/persistence/json-payload";
 
 export type PersistedWorkspaceDraft = {
@@ -20,6 +21,8 @@ export type PersistedWorkspaceDraft = {
   profilePhotoAssetRef?: string;
   resumeExtractedText: string;
   calibratedResume?: CalibratedResumeProfile;
+  jdInsight?: JDInsight;
+  rewriteStrategy?: RewriteStrategy;
   analysis: {
     fitScore: number;
     optimizationMode: "baseline_jd_match" | "talent_amplified";
@@ -56,9 +59,12 @@ export type PersistedWorkspaceDraft = {
     status: "pending" | "accepted" | "rejected";
     sourceKind: "resume_baseline" | "master_fact" | "target_role_fit" | "revision";
     sourceLabel: string;
-    generationMode?: "model" | "deterministic_fallback";
+    generationMode?: GenerationMode;
     modelProvider?: "gemini" | "openai_compatible" | "deterministic_fallback";
     modelFallbackReason?: string;
+    jdAbility?: string;
+    factAnchors?: string[];
+    verification?: RewriteVerification;
     parentSuggestionId?: string;
     revisionRound: number;
     userFeedbackType?: string;

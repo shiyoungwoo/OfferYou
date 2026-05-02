@@ -259,10 +259,10 @@ describe("generateSeedSuggestions", () => {
     expect(suggestions[0]?.generationMode).toBe("deterministic_fallback");
     expect(suggestions[0]?.modelProvider).toBe("deterministic_fallback");
     expect(suggestions[0]?.modelFallbackReason).toContain("确定性回退");
-    expect(suggestions[0]?.reasonText).toContain("模型降级原因");
+    expect(suggestions[0]?.reasonText).not.toContain("模型降级原因");
   });
 
-  it("keeps quality warnings in reason text when the model echoes the original text", async () => {
+  it("stores quality warnings in verification when the model echoes the original text", async () => {
     callModelJSON.mockResolvedValue({
       provider: "openai_compatible",
       data: {
@@ -298,7 +298,8 @@ describe("generateSeedSuggestions", () => {
 
     expect(callModelJSON).toHaveBeenCalledOnce();
     expect(suggestions[0]?.afterText).toBe("AI 产品实践者：正在独立设计 AI 求职辅助产品 OfferYou。");
-    expect(suggestions[0]?.reasonText).toContain("质量提示");
+    expect(suggestions[0]?.reasonText).not.toContain("质量提示");
+    expect(suggestions[0]?.verification?.issues.join(" ")).toContain("过于接近");
     expect(suggestions[0]?.generationMode).toBe("model");
   });
 });

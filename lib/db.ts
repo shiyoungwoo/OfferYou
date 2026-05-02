@@ -4,6 +4,10 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 
 const execFileAsync = promisify(execFile);
+const SQLITE_BUSY_TIMEOUT_MS = 5000;
+const SQLITE_MAX_ATTEMPTS = 3;
+let databaseReadyPromise: Promise<void> | null = null;
+let databaseReadyPath: string | null = null;
 
 function getDatabasePath() {
   return path.join(process.cwd(), "storage", "offeryou.sqlite");
@@ -13,7 +17,38 @@ function escapeSql(value: string) {
   return value.replace(/'/g, "''");
 }
 
-export async function ensureDatabase() {
+function isSqliteBusyError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return error.message.includes("database is locked") || error.message.includes("SQLITE_BUSY");
+}
+
+async function waitForRetry(attempt: number) {
+  await new Promise((resolve) => setTimeout(resolve, attempt * 150));
+}
+
+async function runSqlite(args: string[]) {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= SQLITE_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await execFileAsync("sqlite3", ["-cmd", `.timeout ${SQLITE_BUSY_TIMEOUT_MS}`, ...args]);
+    } catch (error) {
+      lastError = error;
+      if (!isSqliteBusyError(error) || attempt === SQLITE_MAX_ATTEMPTS) {
+        throw error;
+      }
+
+      await waitForRetry(attempt);
+    }
+  }
+
+  throw lastError;
+}
+
+async function initializeDatabase() {
   await mkdir(path.join(process.cwd(), "storage"), { recursive: true });
 
   const schema = `
@@ -79,17 +114,34 @@ export async function ensureDatabase() {
     );
   `;
 
-  await execFileAsync("sqlite3", [getDatabasePath(), schema]);
+  await runSqlite([getDatabasePath(), schema]);
+}
+
+export async function ensureDatabase() {
+  const databasePath = getDatabasePath();
+
+  if (databaseReadyPath !== databasePath) {
+    databaseReadyPath = databasePath;
+    databaseReadyPromise = null;
+  }
+
+  databaseReadyPromise ??= initializeDatabase().catch((error) => {
+    databaseReadyPromise = null;
+    databaseReadyPath = null;
+    throw error;
+  });
+
+  await databaseReadyPromise;
 }
 
 export async function executeSql(sql: string) {
   await ensureDatabase();
-  await execFileAsync("sqlite3", [getDatabasePath(), sql]);
+  await runSqlite([getDatabasePath(), sql]);
 }
 
 export async function querySql<T>(sql: string): Promise<T[]> {
   await ensureDatabase();
-  const { stdout } = await execFileAsync("sqlite3", ["-json", getDatabasePath(), sql]);
+  const { stdout } = await runSqlite(["-json", getDatabasePath(), sql]);
 
   if (!stdout.trim()) {
     return [];

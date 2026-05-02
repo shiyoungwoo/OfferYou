@@ -1,7 +1,9 @@
 import { callModelJSON } from "@/lib/ai/model-gateway";
 import { getDefaultModelProvider } from "@/lib/ai/model-provider-config";
+import { buildJDInsight, buildRewriteStrategy } from "@/lib/services/analysis/jd-insight";
 import { generateSeedSuggestions, generateAISuggestions } from "@/lib/services/analysis/suggestion-generator";
 import type { CalibratedResumeProfile } from "@/lib/services/calibration/resume-calibration-types";
+import type { JDInsight, RewriteStrategy } from "@/lib/services/job-apply/agent-run";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -33,6 +35,8 @@ export type AnalysisResult = {
   strengths: string[];
   gaps: string[];
   riskNotes: string[];
+  jdInsight: JDInsight;
+  rewriteStrategy: RewriteStrategy;
   suggestions: ReturnType<typeof generateSeedSuggestions>;
 };
 
@@ -108,6 +112,14 @@ export async function analyzeDraft(input: AnalysisInput): Promise<AnalysisResult
 
   const normalizedResponse = normalizeGeminiAnalysisResponse(response.data);
   const riskNotes = mergeRiskNotes(normalizedResponse.riskNotes, response.fallbackReason);
+  const jdInsight = buildJDInsight({
+    jdText: input.jdText,
+    company: input.company,
+    jobTitle: input.jobTitle,
+    gaps: normalizedResponse.gaps,
+    keywordsToBridge: normalizedResponse.keywordsToBridge
+  });
+  const rewriteStrategy = buildRewriteStrategy(jdInsight);
   const suggestions =
     response.provider !== "deterministic_fallback"
       ? await generateAISuggestions(
@@ -120,7 +132,9 @@ export async function analyzeDraft(input: AnalysisInput): Promise<AnalysisResult
             facts: input.facts,
             calibratedResume: input.calibratedResume,
             gaps: normalizedResponse.gaps,
-            keywordsToBridge: normalizedResponse.keywordsToBridge
+            keywordsToBridge: normalizedResponse.keywordsToBridge,
+            jdInsight,
+            rewriteStrategy
           },
           { modelProvider: response.provider }
         )
@@ -132,6 +146,8 @@ export async function analyzeDraft(input: AnalysisInput): Promise<AnalysisResult
     strengths: normalizedResponse.strengths,
     gaps: normalizedResponse.gaps,
     riskNotes,
+    jdInsight,
+    rewriteStrategy,
     suggestions
   };
 }
@@ -148,6 +164,14 @@ function analyzeDraftDeterministic(
   fallbackReason?: string
 ): AnalysisResult {
   const deterministic = buildDeterministicAnalysisResponse(input, optimizationMode);
+  const jdInsight = buildJDInsight({
+    jdText: input.jdText,
+    company: input.company,
+    jobTitle: input.jobTitle,
+    gaps: deterministic.gaps,
+    keywordsToBridge: deterministic.keywordsToBridge
+  });
+  const rewriteStrategy = buildRewriteStrategy(jdInsight);
     const suggestions = generateSeedSuggestions({
       jdText: input.jdText,
       company: input.company,
@@ -164,6 +188,8 @@ function analyzeDraftDeterministic(
     strengths: deterministic.strengths,
     gaps: deterministic.gaps,
     riskNotes: mergeRiskNotes(deterministic.riskNotes, fallbackReason),
+    jdInsight,
+    rewriteStrategy,
     suggestions
   };
 }

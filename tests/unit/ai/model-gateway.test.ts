@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { callGemini, callGeminiJSON } from "@/lib/ai/gemini-client";
+import { callGemini } from "@/lib/ai/gemini-client";
 
 vi.mock("@/lib/ai/gemini-client", () => ({
   callGemini: vi.fn(),
@@ -75,8 +75,9 @@ describe("model gateway", () => {
 
   it("uses Gemini when an API key exists", async () => {
     process.env.GEMINI_API_KEY = "test-key";
-    vi.mocked(callGeminiJSON).mockResolvedValue({ hello: "world" });
-    vi.mocked(callGemini).mockResolvedValue("plain text");
+    vi.mocked(callGemini)
+      .mockResolvedValueOnce("{\"hello\":\"world\"}")
+      .mockResolvedValueOnce("plain text");
 
     const { callModelJSON, callModelText, getAvailableModelProviders } = await import("@/lib/ai/model-gateway");
 
@@ -153,7 +154,9 @@ describe("model gateway", () => {
 
   it("returns a readable fallback reason when Gemini JSON parsing fails", async () => {
     process.env.GEMINI_API_KEY = "test-key";
-    vi.mocked(callGeminiJSON).mockResolvedValue(null);
+    vi.mocked(callGemini)
+      .mockResolvedValueOnce("not json")
+      .mockResolvedValueOnce("still not json");
 
     const { callModelJSON } = await import("@/lib/ai/model-gateway");
 
@@ -170,9 +173,29 @@ describe("model gateway", () => {
     expect(result.fallbackReason).toContain("确定性回退");
   });
 
+  it("repairs invalid provider JSON once before falling back", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    vi.mocked(callGemini)
+      .mockResolvedValueOnce("not json")
+      .mockResolvedValueOnce("{\"hello\":\"repaired\"}");
+
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+
+    const result = await callModelJSON({
+      systemPrompt: "system",
+      userPrompt: "user",
+      provider: "gemini",
+      fallbackFactory: () => ({ hello: "fallback" })
+    });
+
+    expect(result.provider).toBe("gemini");
+    expect(result.generationMode).toBe("model_repaired");
+    expect(result.data).toEqual({ hello: "repaired" });
+    expect(result.trace?.generationMode).toBe("model_repaired");
+  });
+
   it("returns a readable fallback reason when Gemini throws", async () => {
     process.env.GEMINI_API_KEY = "test-key";
-    vi.mocked(callGeminiJSON).mockRejectedValue(new Error("network down"));
     vi.mocked(callGemini).mockRejectedValue(new Error("text network down"));
 
     const { callModelJSON, callModelText } = await import("@/lib/ai/model-gateway");
@@ -202,7 +225,7 @@ describe("model gateway", () => {
 
   it("returns a readable fallback reason when Gemini auth expires", async () => {
     process.env.GEMINI_API_KEY = "expired-key";
-    vi.mocked(callGeminiJSON).mockRejectedValue(new Error("API key expired. Please renew the API key."));
+    vi.mocked(callGemini).mockRejectedValue(new Error("API key expired. Please renew the API key."));
 
     const { callModelJSON } = await import("@/lib/ai/model-gateway");
 

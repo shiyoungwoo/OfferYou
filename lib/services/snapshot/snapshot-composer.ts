@@ -35,7 +35,7 @@ export async function composeSnapshotDocument(draft: PersistedWorkspaceDraft): P
   // we should only consider the most recent one that isn't pending.
   const suggestionGroups = new Map<string, SnapshotSuggestion[]>();
   for (const s of suggestions) {
-    const key = `${s.section}:${s.title}`;
+    const key = s.candidateId ? `${s.section}:${s.candidateId}` : `${s.section}:${s.title}`;
     if (!suggestionGroups.has(key)) suggestionGroups.set(key, []);
     suggestionGroups.get(key)!.push(s);
   }
@@ -113,13 +113,13 @@ function buildPersonalInfoItems(
   const education = formatEducationSummary(resumeSections.education[0]);
   const language = extractLanguageSummary(resumeSections.skills);
   const items = [
-    `手机：${resumeSignals.phone ?? "未填写"}`,
-    `邮箱：${resumeSignals.email ?? "未填写"} ｜ 求职意向：${targetTitle}`,
-    `学历：${education ?? "未填写"}`,
+    resumeSignals.phone ? `手机：${resumeSignals.phone}` : "",
+    resumeSignals.email ? `邮箱：${resumeSignals.email} ｜ 求职意向：${targetTitle}` : `求职意向：${targetTitle}`,
+    education ? `学历：${education}` : "",
     language ? `英语：${language}` : "",
-    `居住地：${resumeSignals.location ?? "未填写"}`,
-    `GitHub：${resumeSignals.github ?? "未填写"}`,
-    `作品集：${resumeSignals.portfolio ?? "未填写"}`
+    resumeSignals.location ? `居住地：${resumeSignals.location}` : "",
+    resumeSignals.github ? `GitHub：${resumeSignals.github}` : "",
+    resumeSignals.portfolio ? `作品集：${resumeSignals.portfolio}` : ""
   ].filter(Boolean);
 
   return toTextItems(items);

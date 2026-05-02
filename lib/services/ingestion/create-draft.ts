@@ -127,6 +127,8 @@ export async function createDraft(input: CreateDraftInput): Promise<PersistedWor
     profilePhotoAssetRef: input.profilePhotoAssetRef,
     resumeExtractedText,
     calibratedResume,
+    jdInsight: analysis.jdInsight,
+    rewriteStrategy: analysis.rewriteStrategy,
     analysis: {
       fitScore: analysis.fitScore,
       optimizationMode: analysis.optimizationMode,

@@ -44,6 +44,20 @@ describe("interview-prep-service", () => {
         originalFilename: "jd.txt"
       },
       resumeExtractedText: "吴同学\nai product manager\nwsyoung@example.com",
+      jdInsight: {
+        company: "OfferYou",
+        jobTitle: "AI Product Manager",
+        hardRequirements: ["AI 工具 / Prompt 应用"],
+        coreAbilities: ["AI 工具 / Prompt 应用", "产品需求拆解"],
+        bonusItems: ["作品集或账号案例"],
+        avoidItems: ["不改写公司、学历、时间和可核验事实"]
+      },
+      rewriteStrategy: {
+        priorities: ["AI 工具 / Prompt 应用", "产品需求拆解"],
+        sectionOrder: ["summary", "project", "experience", "education"],
+        lowRelevancePolicy: "compress_keep_timeline",
+        distortionGuards: ["不改写公司、学历、时间和可核验事实"]
+      },
       analysis: {
         fitScore: 86,
         optimizationMode: "baseline_jd_match",
@@ -83,7 +97,18 @@ describe("interview-prep-service", () => {
         title: "AI 产品经理",
         meta: ["手机：18513449520"]
       },
-      sections: []
+      sections: [
+        {
+          id: "summary",
+          title: "个人优势",
+          items: [
+            {
+              type: "text",
+              text: "AI 工具与 Prompt 应用：把岗位定制、确认和导出串成稳定链路。"
+            }
+          ]
+        }
+      ]
     };
 
     await saveSnapshotDocument("draft-1", snapshot);
@@ -109,6 +134,8 @@ describe("interview-prep-service", () => {
     expect(prep.questions.length).toBeLessThanOrEqual(8);
     expect(prep.selfIntroDraft).toContain("OfferYou");
     expect(prep.selfIntroDraft).toContain("AI Product Manager");
+    expect(prep.selfIntroDraft).toContain("AI 工具与 Prompt 应用");
+    expect(prep.questions.some((question) => question.questionText.includes("AI 工具 / Prompt 应用"))).toBe(true);
 
     const updatedRecord = await readApplicationRecord(record.id);
     expect(updatedRecord?.interviewPrepId).toBe(prep.id);
