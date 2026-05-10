@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { buildTalentProfile } from "@/lib/services/talent/talent-profile";
+import { describe, expect, it, vi } from "vitest";
+import { buildTalentProfile, buildTalentProfileWithModel } from "@/lib/services/talent/talent-profile";
+
+vi.mock("@/lib/ai/model-gateway", () => ({
+  callModelJSON: vi.fn()
+}));
 
 describe("buildTalentProfile", () => {
   it("derives strength signals and role directions from lived-experience answers", () => {
@@ -31,5 +35,43 @@ describe("buildTalentProfile", () => {
     expect(profile.signals).toHaveLength(0);
     expect(profile.cautionNotes.join(" ")).toMatch(/证据还不够多/);
     expect(profile.confidenceNote).toMatch(/早期/);
+  });
+
+  it("generates talent profile with model output when available", async () => {
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+    vi.mocked(callModelJSON).mockResolvedValueOnce({
+      provider: "openai_compatible",
+      data: {
+        headline: "你最容易发光的状态，是作为「结构化梳理者」。",
+        summary: "模型生成的天赋画像。",
+        signals: [
+          { key: "clarity_builder", label: "结构化梳理者", description: "能把混乱信息理清。", evidence: ["梳理了复杂流程"] }
+        ],
+        workStyle: ["需要自主空间"],
+        suitableDirections: ["运营、项目推进类方向"],
+        cautionNotes: ["继续保持验证"],
+        confidenceNote: "当前可信度为中等。"
+      },
+      generationMode: "model"
+    });
+
+    const result = await buildTalentProfileWithModel({
+      proudMoment: "I led a messy workflow recovery and clarified the next steps."
+    });
+
+    expect(result.profile.headline).toContain("结构化梳理者");
+    expect(result.profile.signals).toHaveLength(1);
+    expect(result.generationMode).toBe("model");
+    expect(result.modelProvider).toBe("openai_compatible");
+    expect(result.riskNotes).toBeUndefined();
+  });
+
+  it("propagates model error for caller to handle fallback", async () => {
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+    vi.mocked(callModelJSON).mockRejectedValueOnce(new Error("Model timeout"));
+
+    await expect(
+      buildTalentProfileWithModel({ proudMoment: "Some answer." })
+    ).rejects.toThrow("Model timeout");
   });
 });

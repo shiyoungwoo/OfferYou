@@ -349,6 +349,7 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
     expect(document.sections.find((section) => section.id === "education")?.items[0]).toMatchObject({
       type: "entry",
       heading: "对外经济贸易大学",
+      subheading: "全球价值链（应用经济学） ｜ 硕士",
       meta: "2020-2022"
     });
   });
@@ -406,5 +407,592 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
     const workText = JSON.stringify(document.sections.find((section) => section.id === "work-experience")?.items);
     expect(workText).toContain("排班");
     expect(workText.match(/广发银行北京分行/g)?.length).toBe(1);
+  });
+
+  it("cleans markdown residue and placeholder lines before rendering resume sections", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-clean-layout",
+      userId: "default-user",
+      company: "图灵文化",
+      jobTitle: "AI 就业指导产品经理",
+      language: "zh",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "要求 AI 工作流设计、流程梳理和跨团队协作。",
+      jdAsset: {
+        storagePath: "/tmp/jd.txt",
+        mimeType: "text/plain",
+        originalFilename: "jd.txt"
+      },
+      resumeExtractedText: [
+        "吴世阳",
+        "个人优势",
+        "> **AI 产品实践者：** 正在独立设计 AI 求职辅助产品 OfferYou。",
+        "教育背景",
+        "对外经济贸易大学 硕士 2020 - 2022",
+        "湖南工业大学 本科 2013 - 2017",
+        "---",
+        "---"
+      ].join("\n"),
+      analysis: {
+        fitScore: 66,
+        optimizationMode: "baseline_jd_match",
+        strengths: [],
+        gaps: [],
+        riskNotes: []
+      },
+      suggestions: [
+        {
+          id: "summary-clean",
+          section: "summary",
+          title: "个人优势改写",
+          beforeText: "AI 产品实践者",
+          afterText: "> **AI 产品实践者：** 正在独立设计 AI 求职辅助产品 OfferYou，对应「工作流设计、流程梳理和跨团队协作」。",
+          reasonText: "匹配 JD。",
+          status: "accepted",
+          sourceKind: "target_role_fit",
+          sourceLabel: "AI 改写建议",
+          revisionRound: 0
+        },
+        {
+          id: "work-clean",
+          section: "experience",
+          title: "- 通过数据反馈驱动方案迭代优化，成功将核心指标达标稳定化，体现从需求分析到方案优化的产品化思维",
+          beforeText: "陕西怡阳医疗科技有限公司 数据工程师 2025.09 - 2025.11",
+          afterText: "- 通过数据反馈驱动方案迭代优化，成功将核心指标达标稳定化，体现从需求分析到方案优化的产品化思维。",
+          reasonText: "匹配 JD。",
+          status: "accepted",
+          sourceKind: "resume_baseline",
+          sourceLabel: "AI 改写建议",
+          revisionRound: 0
+        }
+      ],
+      factSubmissions: [],
+      masterFactsUsed: []
+    });
+
+    const snapshotText = JSON.stringify(document);
+    expect(snapshotText).not.toContain("**");
+    expect(snapshotText).not.toContain(">");
+    expect(snapshotText).not.toContain("\\\"---\\\"");
+    expect(snapshotText).toContain("AI 产品实践者");
+
+    const workItems = document.sections.find((section) => section.id === "work-experience")?.items ?? [];
+    expect(JSON.stringify(workItems[0])).not.toContain("通过数据反馈驱动方案迭代优化，成功将核心指标达标稳定化，体现从需求分析到方案优化的产品化思维\",\"meta");
+    expect(JSON.stringify(workItems[0])).toContain("陕西怡阳医疗科技有限公司");
+    expect(workItems[0]).toMatchObject({
+      type: "entry",
+      summary: undefined,
+      bullets: expect.arrayContaining([
+        "通过数据反馈驱动方案迭代优化，成功将核心指标达标稳定化，体现从需求分析到方案优化的产品化思维。"
+      ])
+    });
+
+    const educationText = JSON.stringify(document.sections.find((section) => section.id === "education")?.items);
+    expect(educationText).toContain("对外经济贸易大学");
+    expect(educationText).toContain("湖南工业大学");
+    expect(educationText).not.toContain("---");
+  });
+
+  it("repairs dirty calibrated project and education fragments before rendering the PDF document", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-dirty-calibration",
+      userId: "default-user",
+      company: "图灵文化",
+      jobTitle: "AI 就业指导产品经理",
+      language: "zh",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "要求 AI 工作流设计、流程梳理和跨团队协作。",
+      jdAsset: {
+        storagePath: "/tmp/jd.txt",
+        mimeType: "text/plain",
+        originalFilename: "jd.txt"
+      },
+      resumeExtractedText: "baseline",
+      calibratedResume: {
+        status: "needs_review",
+        personalInfo: {
+          name: "吴世阳",
+          phone: "18513449520",
+          email: "434995517@qq.com"
+        },
+        entries: [
+          {
+            id: "project-1",
+            section: "project",
+            title: "OfferYou AI 岗位定制简历助手 （个人产品项目）",
+            dateRange: "2026.03 - 至今",
+            bullets: ["独立完成产品定义与 MVP 范围收敛。"],
+            sourceText: "OfferYou AI 岗位定制简历助手 （个人产品项目） 2026.03 - 至今",
+            confidence: "high",
+            issues: []
+          },
+          {
+            id: "project-body-1",
+            section: "project",
+            title: "输出完整的产品输入输出协议文档、OpenAPI 3.1 接口草案、前端四页面状态机设计",
+            bullets: ["定义「绝对防失真」原则，用户逐条确认。"],
+            sourceText: "输出完整的产品输入输出协议文档、OpenAPI 3.1 接口草案、前端四页面状态机设计",
+            confidence: "medium",
+            issues: []
+          },
+          {
+            id: "project-2",
+            section: "project",
+            title: "AI 工具自媒体内容运营 （个人项目）",
+            dateRange: "2026.03 - 至今",
+            bullets: ["策划并发布 AI 工具类深度图文系列。"],
+            sourceText: "AI 工具自媒体内容运营 （个人项目） 2026.03 - 至今",
+            confidence: "high",
+            issues: []
+          },
+          {
+            id: "education-1",
+            section: "education",
+            title: "对外经济贸易大学 | 硕士 | 全球价值链（应用经济学）",
+            bullets: [],
+            sourceText: "对外经济贸易大学 | 硕士 | 全球价值链（应用经济学）",
+            confidence: "high",
+            issues: []
+          },
+          {
+            id: "education-date-1",
+            section: "education",
+            title: "2020 - 2022",
+            bullets: [],
+            sourceText: "2020 - 2022",
+            confidence: "medium",
+            issues: []
+          },
+          {
+            id: "education-2",
+            section: "education",
+            title: "湖南工业大学 | 本科 | 数学与应用数学（金融统计）",
+            bullets: [],
+            sourceText: "湖南工业大学 | 本科 | 数学与应用数学（金融统计）",
+            confidence: "high",
+            issues: []
+          },
+          {
+            id: "education-date-2",
+            section: "education",
+            title: "2013 - 2017",
+            bullets: [],
+            sourceText: "2013 - 2017",
+            confidence: "medium",
+            issues: []
+          }
+        ],
+        unclassifiedText: [],
+        parseWarnings: [],
+        modelNotes: [],
+        modelProvider: "deterministic_fallback",
+        updatedAt: "2026-05-06T00:00:00.000Z"
+      },
+      analysis: {
+        fitScore: 60,
+        optimizationMode: "baseline_jd_match",
+        strengths: [],
+        gaps: [],
+        riskNotes: []
+      },
+      suggestions: [],
+      factSubmissions: [],
+      masterFactsUsed: []
+    });
+
+    const projectItems = document.sections.find((section) => section.id === "project-experience")?.items ?? [];
+    const projectText = JSON.stringify(projectItems);
+    expect(projectItems).toHaveLength(2);
+    expect(projectText).toContain("OfferYou AI 岗位定制简历助手");
+    expect(projectText).toContain("OpenAPI 3.1");
+    expect(projectText.match(/OpenAPI 3.1/g)?.length).toBe(1);
+    expect(projectText).toContain("AI 工具自媒体内容运营");
+    expect(projectText.match(/2026.03 - 至今/g)?.length).toBe(2);
+
+    const educationItems = document.sections.find((section) => section.id === "education")?.items ?? [];
+    const educationText = JSON.stringify(educationItems);
+    expect(educationItems).toHaveLength(2);
+    expect(educationText).toContain("对外经济贸易大学");
+    expect(educationText).toContain("湖南工业大学");
+    expect(educationText).toContain("全球价值链（应用经济学）");
+    expect(educationText).toContain("数学与应用数学（金融统计）");
+    expect(educationText).toContain("2020-2022");
+    expect(educationText).toContain("2013-2017");
+    expect(educationText).not.toContain("\"heading\":\"2020");
+  });
+
+  it("keeps unaccepted calibrated projects and removes internal advice from resume body", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-accepted-plus-baseline",
+      userId: "default-user",
+      company: "魔镜洞察",
+      jobTitle: "AI 产品经理 Vibe Coding",
+      language: "zh",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "要求 Vibe Coding、AI Agent、Claude Code、数据分析与产品落地。",
+      jdAsset: {
+        storagePath: "/tmp/jd.txt",
+        mimeType: "text/plain",
+        originalFilename: "jd.txt"
+      },
+      resumeExtractedText: "baseline",
+      calibratedResume: {
+        status: "confirmed",
+        personalInfo: {
+          name: "吴世阳",
+          phone: "18513449520",
+          email: "434995517@qq.com"
+        },
+        entries: [
+          {
+            id: "project-offeryou",
+            section: "project",
+            title: "OfferYou AI 岗位定制简历助手（个人产品项目）",
+            dateRange: "2026.03 - 至今",
+            bullets: ["独立完成产品定义与 MVP 范围收敛，设计岗位定制与快照导出链路。"],
+            sourceText: "OfferYou AI 岗位定制简历助手 2026.03 - 至今",
+            confidence: "high",
+            issues: []
+          },
+          {
+            id: "project-content",
+            section: "project",
+            title: "AI 工具自媒体内容运营（个人项目）",
+            dateRange: "2026.03 - 至今",
+            bullets: ["策划并发布 AI 工具类深度图文系列。"],
+            sourceText: "AI 工具自媒体内容运营 2026.03 - 至今",
+            confidence: "high",
+            issues: []
+          }
+        ],
+        unclassifiedText: [],
+        parseWarnings: [],
+        modelNotes: [],
+        modelProvider: "openai_compatible",
+        updatedAt: "2026-05-07T00:00:00.000Z"
+      },
+      analysis: {
+        fitScore: 82,
+        optimizationMode: "baseline_jd_match",
+        strengths: [],
+        gaps: [],
+        riskNotes: []
+      },
+      suggestions: [
+        {
+          id: "summary-ai",
+          section: "summary",
+          title: "个人优势",
+          beforeText: "AI 产品实践者",
+          afterText: [
+            "AI 产品实践者：独立推进 OfferYou MVP，完成核心流程定义与接口草案。",
+            "【JD 缺失能力提醒】：JD 强调 Claude Code，建议在总结中补充具体实践。"
+          ].join("\n"),
+          reasonText: "匹配 JD。",
+          status: "accepted",
+          sourceKind: "resume_baseline",
+          sourceLabel: "AI 改写建议",
+          revisionRound: 0
+        },
+        {
+          id: "project-ai-content",
+          candidateId: "project-content",
+          section: "project",
+          title: "AI 工具自媒体内容运营（个人项目）",
+          beforeText: "策划并发布 AI 工具类深度图文系列。",
+          afterText: "AI 工具自媒体内容运营（个人项目）\n2026.03 - 至今\n- 围绕 AI 工具和 Vibe Coding 主题策划深度图文，验证内容在目标用户群中的传播力。",
+          reasonText: "对应 JD 中 AI 工具和 Vibe Coding 要求。",
+          status: "accepted",
+          sourceKind: "resume_baseline",
+          sourceLabel: "AI 改写建议",
+          revisionRound: 0
+        }
+      ],
+      factSubmissions: [],
+      masterFactsUsed: []
+    });
+
+    const resumeText = JSON.stringify(document);
+    expect(resumeText).toContain("OfferYou AI 岗位定制简历助手");
+    expect(resumeText).toContain("AI 工具自媒体内容运营");
+    expect(resumeText).not.toContain("JD 缺失能力提醒");
+    expect(resumeText).not.toContain("建议在总结中补充");
+  });
+
+  it("does not render education or credential text as work experience even when accepted suggestion is mislabeled", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-guard",
+      userId: "user-1",
+      company: "测试公司",
+      jobTitle: "AI 产品经理",
+      language: "zh-CN",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "需要 AI 产品经理",
+      resumeExtractedText: "",
+      calibratedResume: {
+        status: "confirmed",
+        personalInfo: {
+          name: "吴世阳",
+          phone: "18513449520",
+          email: "434995517@qq.com"
+        },
+        entries: [
+          {
+            id: "edu-1",
+            candidateId: "edu-1",
+            section: "education",
+            sectionType: "education",
+            title: "对外经济贸易大学",
+            dateRange: "2020 - 2022",
+            bullets: ["硕士"],
+            sourceText: "对外经济贸易大学\n2020 - 2022\n硕士",
+            rawText: "对外经济贸易大学\n2020 - 2022\n硕士",
+            confidence: "high",
+            issues: []
+          },
+          {
+            id: "work-1",
+            candidateId: "work-1",
+            section: "work",
+            sectionType: "work",
+            title: "广发银行北京分行 | 综合柜员岗",
+            dateRange: "2022.08 - 2025.08",
+            bullets: ["负责运营数据统计与客户服务。"],
+            sourceText: "广发银行北京分行 | 综合柜员岗\n2022.08 - 2025.08\n负责运营数据统计与客户服务。",
+            rawText: "广发银行北京分行 | 综合柜员岗\n2022.08 - 2025.08\n负责运营数据统计与客户服务。",
+            confidence: "high",
+            issues: []
+          }
+        ],
+        unclassifiedText: [],
+        parseWarnings: [],
+        modelNotes: [],
+        modelProvider: "openai_compatible",
+        updatedAt: new Date().toISOString()
+      },
+      suggestions: [
+        {
+          id: "bad-1",
+          candidateId: "edu-1",
+          section: "experience",
+          title: "学历：对外经济贸易大学 | 硕士英语：CET-6",
+          beforeText: "学历：对外经济贸易大学 | 硕士\n英语：CET-6",
+          afterText: "学历：对外经济贸易大学 | 硕士\n英语：CET-6",
+          reasonText: "错误建议",
+          status: "accepted",
+          revisionRound: 0,
+          sourceKind: "resume_baseline",
+          sourceLabel: "测试"
+        }
+      ],
+      analysis: {
+        fitScore: 60,
+        optimizationMode: "baseline_jd_match",
+        strengths: [],
+        gaps: [],
+        riskNotes: []
+      },
+      factSubmissions: [],
+      masterFactsUsed: []
+    } as any);
+
+    const workText = JSON.stringify(document.sections.find((section) => section.id === "work-experience")?.items ?? []);
+    const educationText = JSON.stringify(document.sections.find((section) => section.id === "education")?.items ?? []);
+
+    expect(workText).toContain("广发银行北京分行");
+    expect(workText).not.toContain("CET-6");
+    expect(workText).not.toContain("对外经济贸易大学");
+    expect(educationText).toContain("对外经济贸易大学");
+  });
+
+  it("does not include a standalone supplement section in the final resume document", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-no-supplement",
+      userId: "user-1",
+      company: "测试公司",
+      jobTitle: "AI 产品经理",
+      language: "zh-CN",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "需要 AI 产品经理",
+      resumeExtractedText: "",
+      calibratedResume: {
+        status: "confirmed",
+        personalInfo: {
+          name: "吴世阳",
+          phone: "18513449520",
+          email: "434995517@qq.com"
+        },
+        entries: [
+          {
+            id: "cred-1",
+            candidateId: "cred-1",
+            section: "credential",
+            sectionType: "credential",
+            title: "技能与证书",
+            bullets: ["英语：CET-6", "基金从业资格证"],
+            sourceText: "技能与证书\n英语：CET-6\n基金从业资格证",
+            rawText: "技能与证书\n英语：CET-6\n基金从业资格证",
+            confidence: "high",
+            issues: []
+          }
+        ],
+        unclassifiedText: [],
+        parseWarnings: [],
+        modelNotes: [],
+        modelProvider: "deterministic_fallback",
+        updatedAt: new Date().toISOString()
+      },
+      suggestions: [],
+      analysis: {
+        fitScore: 50,
+        optimizationMode: "baseline_jd_match",
+        strengths: [],
+        gaps: [],
+        riskNotes: []
+      },
+      factSubmissions: [],
+      masterFactsUsed: []
+    } as any);
+
+    expect(document.sections.some((section) => section.id === "supplement" || section.title === "补充信息")).toBe(false);
+  });
+
+  it("does not render education or credential text as project experience when the body is mismatched", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-project-guard",
+      userId: "user-1",
+      company: "测试公司",
+      jobTitle: "AI 产品经理",
+      language: "zh-CN",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "需要 AI 产品经理",
+      resumeExtractedText: "",
+      calibratedResume: {
+        status: "confirmed",
+        personalInfo: {
+          name: "吴世阳"
+        },
+        entries: [
+          {
+            id: "project-1",
+            candidateId: "project-1",
+            section: "project",
+            sectionType: "project",
+            title: "OfferYou AI 岗位定制简历助手",
+            dateRange: "2026.03 - 至今",
+            bullets: ["独立完成产品定义与 MVP 范围收敛。"],
+            sourceText: "OfferYou AI 岗位定制简历助手\n2026.03 - 至今\n独立完成产品定义与 MVP 范围收敛。",
+            rawText: "OfferYou AI 岗位定制简历助手\n2026.03 - 至今\n独立完成产品定义与 MVP 范围收敛。",
+            confidence: "high",
+            issues: []
+          }
+        ],
+        unclassifiedText: [],
+        parseWarnings: [],
+        modelNotes: [],
+        modelProvider: "openai_compatible",
+        updatedAt: new Date().toISOString()
+      },
+      suggestions: [
+        {
+          id: "bad-project-1",
+          candidateId: "project-1",
+          section: "project",
+          title: "岗位相关项目",
+          beforeText: "OfferYou AI 岗位定制简历助手",
+          afterText: "岗位相关项目\n学历：对外经济贸易大学｜硕士\n英语：CET-6",
+          reasonText: "错误建议",
+          status: "accepted",
+          revisionRound: 0,
+          sourceKind: "resume_baseline",
+          sourceLabel: "测试"
+        }
+      ],
+      analysis: {
+        fitScore: 60,
+        optimizationMode: "baseline_jd_match",
+        strengths: [],
+        gaps: [],
+        riskNotes: []
+      },
+      factSubmissions: [],
+      masterFactsUsed: []
+    } as any);
+
+    const projectText = JSON.stringify(document.sections.find((section) => section.id === "project-experience")?.items ?? []);
+
+    expect(projectText).toContain("OfferYou AI 岗位定制简历助手");
+    expect(projectText).not.toContain("CET-6");
+    expect(projectText).not.toContain("对外经济贸易大学");
+  });
+
+  it("merges broken project bullet fragments like 一 + 键导出与投递记录 before rendering", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-project-bullet-merge",
+      userId: "user-1",
+      company: "测试公司",
+      jobTitle: "AI 产品经理",
+      language: "zh-CN",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "需要 AI 产品经理",
+      resumeExtractedText: "",
+      calibratedResume: {
+        status: "confirmed",
+        personalInfo: {
+          name: "吴世阳"
+        },
+        entries: [
+          {
+            id: "project-1",
+            candidateId: "project-1",
+            section: "project",
+            sectionType: "project",
+            title: "OfferYou AI 岗位定制简历助手（个人产品项目）",
+            dateRange: "2026.03 - 至今",
+            bullets: [
+              "独立完成产品定义与 MVP 范围收敛，设计「输入即解构 → 导师式优化 → 快照派生」三阶段核心流程。",
+              "核心模块：简历多格式解析（PDF/Word/图片 OCR）、JD 智能对齐分析（匹配度评分+差距分析）、一",
+              "键导出与投递记录"
+            ],
+            sourceText:
+              "OfferYou AI 岗位定制简历助手（个人产品项目）\n2026.03 - 至今\n独立完成产品定义与 MVP 范围收敛，设计「输入即解构 → 导师式优化 → 快照派生」三阶段核心流程。\n核心模块：简历多格式解析（PDF/Word/图片 OCR）、JD 智能对齐分析（匹配度评分+差距分析）、一\n键导出与投递记录",
+            rawText:
+              "OfferYou AI 岗位定制简历助手（个人产品项目）\n2026.03 - 至今\n独立完成产品定义与 MVP 范围收敛，设计「输入即解构 → 导师式优化 → 快照派生」三阶段核心流程。\n核心模块：简历多格式解析（PDF/Word/图片 OCR）、JD 智能对齐分析（匹配度评分+差距分析）、一\n键导出与投递记录",
+            confidence: "high",
+            issues: []
+          }
+        ],
+        unclassifiedText: [],
+        parseWarnings: [],
+        modelNotes: [],
+        modelProvider: "openai_compatible",
+        updatedAt: new Date().toISOString()
+      },
+      suggestions: [],
+      analysis: {
+        fitScore: 80,
+        optimizationMode: "baseline_jd_match",
+        strengths: [],
+        gaps: [],
+        riskNotes: []
+      },
+      factSubmissions: [],
+      masterFactsUsed: []
+    } as any);
+
+    const projectItems = document.sections.find((section) => section.id === "project-experience")?.items ?? [];
+    const projectText = JSON.stringify(projectItems);
+
+    expect(projectItems).toHaveLength(1);
+    expect(projectText).toContain("一键导出与投递记录");
+    expect(projectText).not.toContain("\"text\":\"键导出与投递记录\"");
+    expect(projectText).not.toContain("\"bullets\":[\"键导出与投递记录\"");
   });
 });

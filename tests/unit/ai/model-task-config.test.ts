@@ -11,6 +11,7 @@ describe("model-task-config", () => {
 
     expect(configs.map((config) => config.task)).toEqual([
       "gap_analysis",
+      "jd_analysis",
       "rewrite",
       "talent",
       "interview",

@@ -5,7 +5,9 @@ import { extractTextFromStoredAsset } from "@/lib/services/ingestion/extract-tex
 import { LocalStorageAdapter } from "@/lib/storage/local-storage-adapter";
 import type { StorageAssetKind } from "@/lib/storage/storage-adapter";
 import { callModelJSON } from "@/lib/ai/model-gateway";
+import { isAllowedUploadType } from "@/lib/services/ingestion/upload-type";
 
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const storageAdapter = new LocalStorageAdapter(path.join(process.cwd(), "storage"));
 
 export async function POST(request: Request) {
@@ -14,7 +16,17 @@ export async function POST(request: Request) {
   const rawKind = String(formData.get("kind") ?? "other");
 
   if (!(file instanceof File)) {
-    return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
+    return NextResponse.json({ error: "请上传文件。" }, { status: 400 });
+  }
+
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json({ error: "文件大小超过 10MB 限制。" }, { status: 400 });
+  }
+
+  const mimeType = file.type || "application/octet-stream";
+
+  if (!isAllowedUploadType(file.name, mimeType)) {
+    return NextResponse.json({ error: "不支持的文件类型，请上传 PDF、DOCX、TXT 或图片文件。" }, { status: 400 });
   }
 
   const kind = normalizeKind(rawKind);

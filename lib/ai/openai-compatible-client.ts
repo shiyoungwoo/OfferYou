@@ -1,37 +1,33 @@
+import type { ModelTaskKey } from "@/lib/ai/model-task-config";
+import { parseLooseJSON } from "@/lib/ai/json-parser";
+import { hasResolvedOpenAICompatibleConfig, resolveOpenAICompatibleModelConfig } from "@/lib/ai/model-routing";
+
 export type OpenAICompatibleCallOptions = {
   systemPrompt: string;
   userPrompt: string;
   jsonMode?: boolean;
+  task?: ModelTaskKey;
 };
 
 export type OpenAICompatibleConfig = {
   apiKey: string;
   baseUrl: string;
   model: string;
+  flavor?: string;
+  tier?: string;
+  authMode?: "api_key" | "oauth";
 };
 
 export function hasOpenAICompatibleConfig() {
-  return Boolean(
-    (process.env.OPENAI_API_KEY || process.env.MIMO_API_KEY) &&
-      (process.env.OPENAI_BASE_URL || process.env.MIMO_BASE_URL) &&
-      (process.env.OPENAI_MODEL || process.env.MIMO_MODEL)
-  );
+  return hasResolvedOpenAICompatibleConfig();
 }
 
-export function getOpenAICompatibleConfig(): OpenAICompatibleConfig | null {
-  if (!hasOpenAICompatibleConfig()) {
-    return null;
-  }
-
-  return {
-    apiKey: process.env.OPENAI_API_KEY ?? process.env.MIMO_API_KEY ?? "",
-    baseUrl: process.env.OPENAI_BASE_URL ?? process.env.MIMO_BASE_URL ?? "",
-    model: process.env.OPENAI_MODEL ?? process.env.MIMO_MODEL ?? ""
-  };
+export function getOpenAICompatibleConfig(task?: ModelTaskKey): OpenAICompatibleConfig | null {
+  return resolveOpenAICompatibleModelConfig(task);
 }
 
 export async function callOpenAICompatible(options: OpenAICompatibleCallOptions): Promise<string> {
-  const config = getOpenAICompatibleConfig();
+  const config = getOpenAICompatibleConfig(options.task);
   if (!config) {
     throw new Error("未检测到 OpenAI 兼容配置。");
   }
@@ -69,74 +65,12 @@ export async function callOpenAICompatible(options: OpenAICompatibleCallOptions)
   return content;
 }
 
-function stripMarkdown(text: string) {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
-  if (fenced?.[1]) {
-    return fenced[1].trim();
-  }
-
-  const fencedLoose = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/iu);
-  if (fencedLoose?.[1]) {
-    return extractFirstJsonValue(fencedLoose[1]) ?? fencedLoose[1].trim();
-  }
-
-  const jsonValue = extractFirstJsonValue(trimmed);
-  if (jsonValue) return jsonValue;
-
-  return trimmed;
-}
-
-function extractFirstJsonValue(text: string) {
-  const source = text.trim();
-  const start = source.search(/[\[{]/u);
-  if (start === -1) return null;
-
-  const open = source[start];
-  const close = open === "{" ? "}" : "]";
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let index = start; index < source.length; index += 1) {
-    const char = source[index];
-
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-
-    if (char === "\\") {
-      escaped = inString;
-      continue;
-    }
-
-    if (char === "\"") {
-      inString = !inString;
-      continue;
-    }
-
-    if (inString) continue;
-
-    if (char === open) {
-      depth += 1;
-    } else if (char === close) {
-      depth -= 1;
-      if (depth === 0) {
-        return source.slice(start, index + 1).trim();
-      }
-    }
-  }
-
-  return null;
-}
-
 export async function callOpenAICompatibleJSON<T = unknown>(
   options: Omit<OpenAICompatibleCallOptions, "jsonMode">
 ): Promise<T | null> {
   try {
     const text = await callOpenAICompatible({ ...options, jsonMode: true });
-    return JSON.parse(stripMarkdown(text)) as T;
+    return parseLooseJSON<T>(text);
   } catch (error) {
     console.error("[OpenAI Compatible JSON] Failed to parse response:", error);
     return null;

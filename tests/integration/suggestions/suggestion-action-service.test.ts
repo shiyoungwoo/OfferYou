@@ -126,6 +126,38 @@ describe("applySuggestionAction", () => {
     expect(vi.mocked(generateSnapshotForDraft)).toHaveBeenCalledWith("draft-1");
   });
 
+  it("blocks accepting failed verification suggestions without manual edits", async () => {
+    const persisted = await readWorkspaceDraft("draft-1");
+    expect(persisted).not.toBeNull();
+    persisted!.suggestions[0]!.verification = { status: "fail", issues: ["事实缺少依据"] };
+    await saveWorkspaceDraft(persisted!);
+
+    await expect(
+      applySuggestionAction({
+        draftId: "draft-1",
+        action: "accept",
+        suggestionId: "s1"
+      })
+    ).rejects.toThrow("未通过事实校验");
+  });
+
+  it("allows accepting failed verification suggestions when afterText is manually provided", async () => {
+    const persisted = await readWorkspaceDraft("draft-1");
+    expect(persisted).not.toBeNull();
+    persisted!.suggestions[0]!.verification = { status: "fail", issues: ["事实缺少依据"] };
+    await saveWorkspaceDraft(persisted!);
+
+    const result = await applySuggestionAction({
+      draftId: "draft-1",
+      action: "accept",
+      suggestionId: "s1",
+      afterText: "用户手动确认后的表达"
+    });
+
+    expect(result.status).toBe("accepted");
+    expect(result.suggestion.acceptedAfterText).toBe("用户手动确认后的表达");
+  });
+
   it("creates a pending fact submission when feedback adds new fact material", async () => {
     const result = await applySuggestionAction({
       draftId: "draft-1",

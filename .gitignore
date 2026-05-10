@@ -14,3 +14,4 @@ prisma/dev.db-journal
 tsconfig.tsbuildinfo
 /docs/quality/job-apply-fixture-artifacts/
 /docs/quality/offeryou-real-trial-artifacts/
+/docs/quality/offeryou-self-use-goal-artifacts/

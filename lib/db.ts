@@ -1,11 +1,9 @@
 import { mkdir } from "node:fs/promises";
-import { promisify } from "node:util";
 import path from "node:path";
-import { execFile } from "node:child_process";
+import Database from "better-sqlite3";
 
-const execFileAsync = promisify(execFile);
 const SQLITE_BUSY_TIMEOUT_MS = 5000;
-const SQLITE_MAX_ATTEMPTS = 3;
+let dbInstance: Database.Database | null = null;
 let databaseReadyPromise: Promise<void> | null = null;
 let databaseReadyPath: string | null = null;
 
@@ -17,39 +15,19 @@ function escapeSql(value: string) {
   return value.replace(/'/g, "''");
 }
 
-function isSqliteBusyError(error: unknown) {
-  if (!(error instanceof Error)) {
-    return false;
+function getDb(): Database.Database {
+  if (!dbInstance) {
+    throw new Error("Database not initialized. Call ensureDatabase() first.");
   }
-
-  return error.message.includes("database is locked") || error.message.includes("SQLITE_BUSY");
-}
-
-async function waitForRetry(attempt: number) {
-  await new Promise((resolve) => setTimeout(resolve, attempt * 150));
-}
-
-async function runSqlite(args: string[]) {
-  let lastError: unknown;
-
-  for (let attempt = 1; attempt <= SQLITE_MAX_ATTEMPTS; attempt += 1) {
-    try {
-      return await execFileAsync("sqlite3", ["-cmd", `.timeout ${SQLITE_BUSY_TIMEOUT_MS}`, ...args]);
-    } catch (error) {
-      lastError = error;
-      if (!isSqliteBusyError(error) || attempt === SQLITE_MAX_ATTEMPTS) {
-        throw error;
-      }
-
-      await waitForRetry(attempt);
-    }
-  }
-
-  throw lastError;
+  return dbInstance;
 }
 
 async function initializeDatabase() {
   await mkdir(path.join(process.cwd(), "storage"), { recursive: true });
+
+  const db = new Database(getDatabasePath());
+  db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+  db.pragma("journal_mode = WAL");
 
   const schema = `
     CREATE TABLE IF NOT EXISTS workspace_drafts (
@@ -93,6 +71,14 @@ async function initializeDatabase() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS master_insights (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE TABLE IF NOT EXISTS talent_profiles (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -114,7 +100,8 @@ async function initializeDatabase() {
     );
   `;
 
-  await runSqlite([getDatabasePath(), schema]);
+  db.exec(schema);
+  dbInstance = db;
 }
 
 export async function ensureDatabase() {
@@ -123,35 +110,43 @@ export async function ensureDatabase() {
   if (databaseReadyPath !== databasePath) {
     databaseReadyPath = databasePath;
     databaseReadyPromise = null;
+    if (dbInstance) {
+      dbInstance.close();
+      dbInstance = null;
+    }
   }
 
   databaseReadyPromise ??= initializeDatabase().catch((error) => {
     databaseReadyPromise = null;
     databaseReadyPath = null;
+    dbInstance = null;
     throw error;
   });
 
   await databaseReadyPromise;
 }
 
+export type SqlParam = string | number | null | boolean;
+
+export async function executeSqlParams(sql: string, params: SqlParam[] = []) {
+  await ensureDatabase();
+  getDb().prepare(sql).run(...params);
+}
+
+export async function querySqlParams<T>(sql: string, params: SqlParam[] = []): Promise<T[]> {
+  await ensureDatabase();
+  return getDb().prepare(sql).all(...params) as T[];
+}
+
 export async function executeSql(sql: string) {
   await ensureDatabase();
-  await runSqlite([getDatabasePath(), sql]);
+  getDb().exec(sql);
 }
 
 export async function querySql<T>(sql: string): Promise<T[]> {
   await ensureDatabase();
-  const { stdout } = await runSqlite(["-json", getDatabasePath(), sql]);
-
-  if (!stdout.trim()) {
-    return [];
-  }
-
-  try {
-    return JSON.parse(stdout) as T[];
-  } catch {
-    throw new Error("数据库查询结果无法解析，请检查 SQLite 输出。");
-  }
+  const stmt = getDb().prepare(sql);
+  return stmt.all() as T[];
 }
 
 export function sqlString(value: string) {

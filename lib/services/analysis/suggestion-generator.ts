@@ -76,8 +76,8 @@ type SuggestionCandidate = SuggestionSeedInput["facts"][number] & {
 };
 
 function loadRewritePrompt(): string {
-  const promptPath = path.join(process.cwd(), "prompts", "rewrite_expert.md");
   try {
+    const promptPath = path.join(process.cwd(), "prompts", "rewrite_expert.md");
     return fs.readFileSync(promptPath, "utf-8");
   } catch {
     return `You are a Professional Resume Consultant specializing in the STAR method.
@@ -94,7 +94,6 @@ export async function generateAISuggestions(
   options: SuggestionGenerationOptions = {}
 ): Promise<SuggestionSeed[]> {
   const provider = options.modelProvider ?? getDefaultModelProvider("rewrite");
-
   if (provider === "deterministic_fallback") {
     return withFallbackReason(
       generateSeedSuggestions(input),
@@ -167,7 +166,8 @@ Resume rewrite rules:
 8. Follow STAR principles (Situation, Task, Action, Result) for "after" text.
 9. If a candidate has low calibration confidence, do not fabricate a投递版 rewrite. Keep the description conservative and focus on structure confirmation.
 10. All output (title, after, reason) MUST be in Chinese (中文).
-11. Include candidateId when you can map a suggestion to a specific candidate.`;
+11. Include candidateId when you can map a suggestion to a specific candidate.
+12. section 由系统根据 candidateId 固定，不允许模型改变。请不要尝试把 education、credential 或 other_needs_review 内容改成工作经历。`;
 
     const result = await callModelJSON<GeminiSuggestionResponse>({
       systemPrompt,
@@ -178,15 +178,20 @@ Resume rewrite rules:
 
     if (result.data?.suggestions && Array.isArray(result.data.suggestions) && result.data.suggestions.length > 0) {
       return result.data.suggestions
-        .filter((s) => isRewritableSuggestionSection(s.section))
-        .map((s, i) =>
-          reviewSuggestion(
+        .flatMap((s, i) => {
+          const matchedCandidate = resolveModelSuggestionCandidate(s, candidates, i);
+
+          if (!matchedCandidate || !isRewritableSuggestionSection(matchedCandidate.section)) {
+            return [];
+          }
+
+          return [reviewSuggestion(
             {
               id: `ai-${i + 1}`,
-              candidateId: s.candidateId ?? candidates[i]?.candidateId,
-              section: s.section || "experience",
-              title: s.title || `AI Suggestion ${i + 1}`,
-              beforeText: s.before,
+              candidateId: matchedCandidate.candidateId ?? s.candidateId,
+              section: matchedCandidate.section || "experience",
+              title: matchedCandidate.title || s.title || `AI Suggestion ${i + 1}`,
+              beforeText: matchedCandidate.text ?? s.before,
               afterText: normalizeModelSuggestionAfterText(s.after),
               reasonText: s.reason,
               status: "pending" as const,
@@ -195,16 +200,22 @@ Resume rewrite rules:
               sourceLabel: getAIRewriteSourceLabel(provider),
               generationMode: result.generationMode ?? "model",
               modelProvider: provider,
-              jdAbility: s.jdAbility ?? selectJDAbilityLabel({ text: `${s.after} ${s.reason}`, jdInsight }),
-              factAnchors: Array.isArray(s.factAnchors) ? s.factAnchors : deriveFactAnchors(s.before)
+              jdAbility: selectJDAbilityLabel({
+                text: `${s.jdAbility ?? ""} ${s.after} ${s.reason}`,
+                jdInsight,
+                fallback: s.jdAbility
+              }),
+              factAnchors: Array.isArray(s.factAnchors) && s.factAnchors.length
+                ? s.factAnchors
+                : deriveFactAnchors(matchedCandidate.text ?? s.before)
             },
             {
               ...input,
               jdInsight,
               rewriteStrategy
             }
-          )
-        );
+          )];
+        });
     }
 
     return withFallbackReason(
@@ -289,7 +300,8 @@ function rankSuggestionCandidate(
     fact.section === "project" ? 2 :
     fact.section === "experience" ? 1 :
     fact.section === "summary" ? 0.5 :
-    fact.section === "supplement" ? -1 : 0;
+    fact.section === "credential" ? -1 :
+    fact.section === "other_needs_review" ? -2 : 0;
   return {
     fact,
     score: relevance * 10 + sectionScore - index * 0.01
@@ -342,6 +354,94 @@ function deriveFactAnchors(text: string) {
     .map((line) => cleanGeneratedResumeText(line).trim())
     .filter((line) => line.length >= 6)
     .slice(0, 3);
+}
+
+function resolveModelSuggestionCandidate(
+  suggestion: GeminiSuggestionResponse["suggestions"][number],
+  candidates: SuggestionCandidate[],
+  index: number
+): SuggestionCandidate | undefined {
+  if (suggestion.candidateId) {
+    const explicit = candidates.find((candidate) => candidate.candidateId === suggestion.candidateId);
+    if (explicit) {
+      return explicit;
+    }
+  }
+
+  const before = normalizeForMatching(suggestion.before);
+  const title = normalizeForMatching(suggestion.title);
+  const byBefore = pickBestCandidateMatch(
+    candidates,
+    (candidate) => scoreTextOverlap(before, normalizeForMatching(candidate.text))
+  );
+
+  if (byBefore) {
+    return byBefore;
+  }
+
+  const byTitle = pickBestCandidateMatch(
+    candidates,
+    (candidate) => scoreTextOverlap(title, normalizeForMatching(candidate.title ?? ""))
+  );
+
+  if (byTitle) {
+    return byTitle;
+  }
+
+  // Some model providers omit candidateId even when the prompt asks for it.
+  // Use candidate order as the last binding fallback, while still inheriting
+  // section from the calibrated candidate so the model cannot drift labels.
+  return candidates[index];
+}
+
+function pickBestCandidateMatch(
+  candidates: SuggestionCandidate[],
+  scoreFn: (candidate: SuggestionCandidate) => number
+) {
+  const ranked = candidates
+    .map((candidate) => ({
+      candidate,
+      score: scoreFn(candidate)
+    }))
+    .sort((left, right) => right.score - left.score);
+
+  return ranked[0] && ranked[0].score >= 0.28 ? ranked[0].candidate : undefined;
+}
+
+function scoreTextOverlap(left: string, right: string) {
+  if (!left || !right) {
+    return 0;
+  }
+
+  if (right.includes(left) || left.includes(right)) {
+    return 1;
+  }
+
+  const leftTokens = tokenSlices(left);
+  const rightTokens = new Set(tokenSlices(right));
+  const hits = leftTokens.filter((token) => rightTokens.has(token)).length;
+  return leftTokens.length ? hits / leftTokens.length : 0;
+}
+
+function tokenSlices(text: string) {
+  const windowSize = 4;
+  if (text.length <= windowSize) {
+    return text ? [text] : [];
+  }
+
+  const tokens: string[] = [];
+  for (let index = 0; index <= text.length - windowSize; index += 1) {
+    tokens.push(text.slice(index, index + windowSize));
+  }
+
+  return tokens;
+}
+
+function normalizeForMatching(text?: string) {
+  return cleanGeneratedResumeText(text ?? "")
+    .replace(/\s+/g, "")
+    .replace(/[，。；：、,.／/｜|()（）【】\[\]{}"'「」『』]/gu, "")
+    .toLowerCase();
 }
 
 // ─── Deterministic helpers (unchanged) ───
@@ -597,11 +697,12 @@ function calibratedEntryToSuggestionCandidate(entry: CalibratedResumeProfile["en
 
 function normalizeCalibratedEntrySection(section: CalibratedResumeProfile["entries"][number]["section"]): string {
   if (section === "summary") return "summary";
+  if (section === "work") return "experience";
   if (section === "project") return "project";
   if (section === "education") return "education";
-  if (section === "supplement") return "supplement";
-  if (section === "work") return "experience";
-  return "experience";
+  if (section === "credential") return "credential";
+  if (section === "personal_info") return "personal_info";
+  return "other_needs_review";
 }
 
 function splitFactIntoSuggestionCandidates(fact: SuggestionSeedInput["facts"][number]): SuggestionCandidate[] {
@@ -675,8 +776,8 @@ function classifyResumeHeading(line: string) {
     return { title: "教育背景", section: "education" };
   }
 
-  if (/^(技能与证书|技能证书|专业技能|技能|证书|语言能力|补充信息|其他信息)$/u.test(normalized)) {
-    return { title: "补充信息", section: "supplement" };
+  if (/^(技能与证书|技能证书|专业技能|技能|证书|语言能力)$/u.test(normalized)) {
+    return { title: "技能与证书", section: "credential" };
   }
 
   return null;
@@ -684,7 +785,7 @@ function classifyResumeHeading(line: string) {
 
 function isRewritableSuggestionSection(section?: string) {
   const normalized = (section ?? "").toLowerCase().replace(/\s+/g, "");
-  return !["education", "edu", "教育经历", "教育背景", "学历背景", "学习经历", "supplement", "skills", "skill", "certificate", "补充信息", "技能", "技能与证书", "证书"].includes(normalized);
+  return normalized === "summary" || normalized === "work" || normalized === "experience" || normalized === "project";
 }
 
 function pushCurrentBlock(

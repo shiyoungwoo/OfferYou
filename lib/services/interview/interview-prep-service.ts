@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { executeSql, querySql, sqlString } from "@/lib/db";
+import { executeSqlParams, querySqlParams } from "@/lib/db";
 import { readWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import {
   readApplicationRecord,
@@ -8,6 +8,7 @@ import {
 import { readSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
 import type { ResumeDocument } from "@/lib/document/resume-document";
 import { parseJsonPayload } from "@/lib/services/persistence/json-payload";
+import { callModelJSON } from "@/lib/ai/model-gateway";
 
 export type InterviewQuestionSourceType = "jd" | "snapshot" | "master_fact" | "inferred";
 
@@ -29,9 +30,87 @@ export type InterviewPrepRecord = {
   candidateName: string;
   selfIntroDraft: string;
   questions: InterviewQuestion[];
+  generationMode?: "model" | "model_repaired" | "deterministic_fallback";
+  riskNotes?: string[];
+  modelProvider?: string;
   createdAt: string;
   updatedAt: string;
 };
+
+type ModelInterviewPrepOutput = {
+  selfIntroDraft: string;
+  questions: Array<{
+    questionText: string;
+    sourceType?: InterviewQuestionSourceType;
+    sourceRef?: string;
+    answerDraft?: string;
+  }>;
+};
+
+async function buildInterviewPrepWithModel(input: {
+  record: NonNullable<Awaited<ReturnType<typeof readApplicationRecord>>>;
+  draft: NonNullable<Awaited<ReturnType<typeof readWorkspaceDraft>>>;
+  snapshot: ResumeDocument | null;
+  prepId: string;
+}): Promise<Pick<InterviewPrepRecord, "selfIntroDraft" | "questions" | "generationMode" | "riskNotes" | "modelProvider">> {
+  const systemPrompt = [
+    "你是一位资深面试辅导教练。根据候选人的简历快照和目标岗位 JD，生成面试准备材料。",
+    "",
+    "规则：",
+    "- 只能基于已确认快照和 JD 中的信息，不编造公司、学历、项目结果。",
+    "- 输出 5 到 8 个面试问题。",
+    "- 自我介绍控制在 60 到 90 秒。",
+    "- 每个问题需标注 sourceType（jd / snapshot / master_fact / inferred）。",
+    "- 输出合法 JSON，不要 Markdown。"
+  ].join("\n");
+
+  const snapshotText = input.snapshot
+    ? input.snapshot.sections
+        .flatMap((s) => s.items.map((item) => (item.type === "entry" ? `${item.heading}: ${(item.bullets ?? []).join("，")}` : item.text)))
+        .filter(Boolean)
+        .join("\n")
+    : "（无快照）";
+
+  const userPrompt = [
+    `公司：${input.record.company}`,
+    `岗位：${input.record.jobTitle}`,
+    "",
+    `JD 能力要求：${(input.draft.jdInsight?.coreAbilities ?? []).join("、") || "（未解析）"}`,
+    `候选人优势：${(input.draft.analysis?.strengths ?? []).join("、") || "（未解析）"}`,
+    "",
+    "已确认简历快照内容：",
+    snapshotText,
+    "",
+    `请输出 JSON：{ "selfIntroDraft": string, "questions": Array<{ "questionText": string, "sourceType": "jd"|"snapshot"|"master_fact"|"inferred", "sourceRef"?: string, "answerDraft"?: string }> }`
+  ].join("\n");
+
+  const result = await callModelJSON<ModelInterviewPrepOutput>({
+    systemPrompt,
+    userPrompt,
+    task: "interview"
+  });
+
+  if (!result.data?.selfIntroDraft || !result.data.questions?.length) {
+    throw new Error("Model returned empty interview prep.");
+  }
+
+  const questions = result.data.questions.slice(0, 8).map((q, index) => ({
+    id: `${input.prepId}-q${index + 1}`,
+    questionText: q.questionText,
+    sourceType: (q.sourceType ?? "inferred") as InterviewQuestionSourceType,
+    sourceRef: q.sourceRef,
+    favorite: false,
+    answerDraft: q.answerDraft ?? ""
+  }));
+
+  return {
+    selfIntroDraft: result.data.selfIntroDraft,
+    questions,
+    generationMode: result.generationMode as InterviewPrepRecord["generationMode"],
+    riskNotes: result.fallbackReason ? [result.fallbackReason] : undefined,
+    modelProvider: result.provider
+  };
+}
 
 export async function createInterviewPrepFromRecord(recordId: string): Promise<InterviewPrepRecord> {
   const existing = await readInterviewPrepForRecord(recordId);
@@ -55,24 +134,35 @@ export async function createInterviewPrepFromRecord(recordId: string): Promise<I
   }
   const snapshot = await readSnapshotForDraft(record.draftId);
   const now = new Date().toISOString();
+  const prepId = `interview-${record.id}`;
+
+  const modelResult = await buildInterviewPrepWithModel({ record, draft, snapshot, prepId }).catch(() => null);
+
+  const selfIntroDraft = modelResult?.selfIntroDraft ?? buildSelfIntroDraft({
+    company: record.company,
+    jobTitle: record.jobTitle,
+    draft,
+    snapshot
+  });
+
+  const questions = modelResult?.questions ?? buildInterviewQuestions({
+    record,
+    draft,
+    snapshot
+  }, prepId);
+
   const prep: InterviewPrepRecord = {
-    id: `interview-${record.id}`,
+    id: prepId,
     applicationRecordId: record.id,
     draftId: record.draftId,
     company: record.company,
     jobTitle: record.jobTitle,
     candidateName: snapshot?.header.name ?? "OfferYou 用户",
-    selfIntroDraft: buildSelfIntroDraft({
-      company: record.company,
-      jobTitle: record.jobTitle,
-      draft,
-      snapshot
-    }),
-    questions: buildInterviewQuestions({
-      record,
-      draft,
-      snapshot
-    }, `interview-${record.id}`),
+    selfIntroDraft,
+    questions,
+    generationMode: modelResult?.generationMode ?? "deterministic_fallback",
+    riskNotes: modelResult?.riskNotes ?? (modelResult ? undefined : ["模型暂不可用，已使用模板生成面试准备。"]),
+    modelProvider: modelResult?.modelProvider,
     createdAt: now,
     updatedAt: now
   };
@@ -88,21 +178,16 @@ export async function createInterviewPrepFromRecord(recordId: string): Promise<I
 }
 
 export async function saveInterviewPrep(prep: InterviewPrepRecord) {
-  await executeSql(`
-    INSERT INTO interview_preps (id, application_record_id, payload_json, created_at, updated_at)
-    VALUES (
-      ${sqlString(prep.id)},
-      ${sqlString(prep.applicationRecordId)},
-      ${sqlString(JSON.stringify(prep))},
-      ${sqlString(prep.createdAt)},
-      ${sqlString(prep.updatedAt)}
-    )
-    ON CONFLICT(id) DO UPDATE SET
-      application_record_id = excluded.application_record_id,
-      payload_json = excluded.payload_json,
-      created_at = excluded.created_at,
-      updated_at = excluded.updated_at;
-  `);
+  await executeSqlParams(
+    `INSERT INTO interview_preps (id, application_record_id, payload_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       application_record_id = excluded.application_record_id,
+       payload_json = excluded.payload_json,
+       created_at = excluded.created_at,
+       updated_at = excluded.updated_at`,
+    [prep.id, prep.applicationRecordId, JSON.stringify(prep), prep.createdAt, prep.updatedAt]
+  );
 }
 
 export function buildInterviewPrepExportText(prep: InterviewPrepRecord) {
@@ -169,8 +254,9 @@ export function buildInterviewPrepReviewChecklist(prep: InterviewPrepRecord) {
 }
 
 export async function readInterviewPrep(prepId: string): Promise<InterviewPrepRecord | null> {
-  const rows = await querySql<{ payload_json: string }>(
-    `SELECT payload_json FROM interview_preps WHERE id = ${sqlString(prepId)} LIMIT 1;`
+  const rows = await querySqlParams<{ payload_json: string }>(
+    "SELECT payload_json FROM interview_preps WHERE id = ? LIMIT 1",
+    [prepId]
   );
 
   if (rows.length === 0) {
@@ -182,8 +268,9 @@ export async function readInterviewPrep(prepId: string): Promise<InterviewPrepRe
 }
 
 export async function readInterviewPrepForRecord(recordId: string): Promise<InterviewPrepRecord | null> {
-  const rows = await querySql<{ payload_json: string }>(
-    `SELECT payload_json FROM interview_preps WHERE application_record_id = ${sqlString(recordId)} LIMIT 1;`
+  const rows = await querySqlParams<{ payload_json: string }>(
+    "SELECT payload_json FROM interview_preps WHERE application_record_id = ? LIMIT 1",
+    [recordId]
   );
 
   if (rows.length === 0) {
@@ -373,6 +460,9 @@ function normalizeInterviewPrep(prep: Partial<InterviewPrepRecord>): InterviewPr
       favorite: question.favorite ?? false,
       answerDraft: question.answerDraft ?? ""
     })),
+    generationMode: prep.generationMode,
+    riskNotes: prep.riskNotes,
+    modelProvider: prep.modelProvider,
     createdAt: prep.createdAt ?? "",
     updatedAt: prep.updatedAt ?? ""
   };

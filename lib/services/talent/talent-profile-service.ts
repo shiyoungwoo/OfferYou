@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { executeSql, querySql, sqlString } from "@/lib/db";
-import { buildTalentProfile, type TalentProfile, type TalentPromptAnswers } from "@/lib/services/talent/talent-profile";
+import { buildTalentProfile, buildTalentProfileWithModel, type TalentProfile, type TalentPromptAnswers } from "@/lib/services/talent/talent-profile";
 import {
   buildCareerNavigation,
   findCareerDirectionBySlug as findCareerDirectionBySlugFromProfile,
@@ -8,6 +8,7 @@ import {
   type CareerNavigationProfile
 } from "@/lib/services/talent/career-navigation";
 import { parseJsonPayload } from "@/lib/services/persistence/json-payload";
+import { saveMasterInsight } from "@/lib/services/master/master-service";
 
 export type TalentProfileRecord = {
   id: string;
@@ -15,6 +16,9 @@ export type TalentProfileRecord = {
   status: "confirmed";
   answers: TalentPromptAnswers;
   profile: TalentProfile;
+  generationMode?: "model" | "model_repaired" | "deterministic_fallback";
+  riskNotes?: string[];
+  modelProvider?: string;
   confirmedAt: string;
 };
 
@@ -36,14 +40,42 @@ export async function confirmTalentProfile(input: {
   answers: TalentPromptAnswers;
 }): Promise<TalentProfileRecord> {
   const confirmedAt = new Date().toISOString();
+
+  const modelResult = await buildTalentProfileWithModel(input.answers).catch(() => null);
+
+  const profile = modelResult?.profile ?? buildTalentProfile(input.answers);
+
+  const riskNotes = [
+    ...(modelResult?.riskNotes ?? (modelResult ? [] : ["模型暂不可用，已使用规则生成天赋画像。"]))
+  ];
+
   const record: TalentProfileRecord = {
     id: `talent-${randomUUID()}`,
     userId: input.userId,
     status: "confirmed",
     answers: input.answers,
-    profile: buildTalentProfile(input.answers),
+    profile,
+    generationMode: modelResult?.generationMode ?? "deterministic_fallback",
+    riskNotes: riskNotes.length > 0 ? riskNotes : undefined,
+    modelProvider: modelResult?.modelProvider,
     confirmedAt
   };
+
+  for (const signal of profile.signals.filter((s) => s.evidence.length >= 2).slice(0, 3)) {
+    try {
+      await saveMasterInsight({
+        userId: input.userId,
+        title: signal.label,
+        insightText: signal.description,
+        evidenceFactIds: [],
+        status: "confirmed"
+      });
+    } catch (error) {
+      const message = "天赋洞察未能写入事实主档，后续岗位匹配可能暂时无法引用该洞察。";
+      record.riskNotes = [...(record.riskNotes ?? []), message];
+      console.warn("[TalentProfile] Failed to save master insight:", error instanceof Error ? error.message : "unknown error");
+    }
+  }
 
   await executeSql(`
     INSERT INTO talent_profiles (id, user_id, status, payload_json, confirmed_at, created_at, updated_at)

@@ -23,9 +23,10 @@ describe("analyzeDraft", () => {
     expect(result.fitScore).toBeGreaterThanOrEqual(0);
     expect(result.strengths.length).toBeGreaterThan(0);
     expect(result.gaps.length).toBeGreaterThan(0);
-    expect(result.suggestions.length).toBeGreaterThan(0);
+    expect(result.suggestions).toHaveLength(0);
     expect(result.optimizationMode).toBe("baseline_jd_match");
     expect(result.riskNotes.join(" ")).toContain("模型降级原因");
+    expect(result.riskNotes.join(" ")).toContain("基础编辑模式");
   });
 
   it("uses calibrated resume entries when they are available", async () => {
@@ -61,8 +62,8 @@ describe("analyzeDraft", () => {
       }
     });
 
-    expect(result.suggestions[0]?.beforeText).toContain("OfferYou AI 岗位定制简历助手");
-    expect(result.suggestions[0]?.candidateId).toBe("cal-1");
+    expect(result.suggestions).toHaveLength(0);
+    expect(result.riskNotes.join(" ")).toContain("未生成 AI 改写建议");
   });
 
   it("uses OpenAI-compatible providers for AI rewrite suggestions instead of seed fallback", async () => {
@@ -84,6 +85,26 @@ describe("analyzeDraft", () => {
                   gaps: ["需要更突出新媒体 AI 化运营"],
                   keywordsToBridge: ["AI 工作流", "Prompt Engineering"],
                   riskNotes: []
+                })
+              }
+            }
+          ]
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  company: "测试公司",
+                  jobTitle: "AI 产品经理",
+                  hardRequirements: ["AI 工作流优化", "Prompt Engineering"],
+                  coreAbilities: ["AI 工作流优化", "Prompt Engineering", "新媒体 AI 化运营"],
+                  bonusItems: ["AI 内容案例"],
+                  avoidItems: ["不编造新媒体成果"],
+                  sourceKeywords: ["AI 工作流优化", "Prompt Engineering", "新媒体 AI 化运营"]
                 })
               }
             }
@@ -153,6 +174,7 @@ describe("analyzeDraft", () => {
     expect(result.optimizationMode).toBe("talent_amplified");
     expect(result.strengths.join(" ")).toContain("已确认的优势档案");
     expect(result.strengths.join(" ")).toContain("客户成功、客户关系与服务推进类方向");
-    expect(result.suggestions[0]?.afterText).toContain("工作流设计");
+    expect(result.suggestions).toHaveLength(0);
+    expect(result.riskNotes.join(" ")).toContain("基础编辑模式");
   });
 });

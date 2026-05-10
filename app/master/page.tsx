@@ -12,7 +12,7 @@ export default async function MasterPage() {
   const { userId } = getDefaultUserContext();
   const facts = await listMasterFacts(userId);
   const records = await listApplicationRecords();
-  const insights = listMasterInsights(userId);
+  const insights = await listMasterInsights(userId);
   const pendingSubmissions = await listPendingFactSubmissions();
   const factUsageCount = new Map<string, number>();
   const latestFactUsage = new Map<

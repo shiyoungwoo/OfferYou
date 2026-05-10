@@ -29,6 +29,13 @@ export async function applySuggestionAction(input: SuggestionActionInput) {
   }
 
   if (input.action === "accept") {
+    const isFailedVerification = suggestion.verification?.status === "fail";
+    const hasManualOverride = Boolean(input.afterText?.trim());
+
+    if (isFailedVerification && !hasManualOverride) {
+      throw new Error("这条建议未通过事实校验，请先编辑或要求 AI 微调后再确认。");
+    }
+
     suggestion.status = "accepted";
     if (input.afterText?.trim()) {
       suggestion.afterText = input.afterText.trim();

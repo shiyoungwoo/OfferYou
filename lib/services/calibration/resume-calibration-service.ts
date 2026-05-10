@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { callModelJSON } from "@/lib/ai/model-gateway";
 import { calibratedResumeProfileSchema } from "@/lib/services/calibration/resume-calibration-types";
 import type {
@@ -6,6 +5,7 @@ import type {
   CalibratedResumeProfile,
   ResumeEntrySection
 } from "@/lib/services/calibration/resume-calibration-types";
+import { normalizeResumeEntrySection } from "@/lib/services/calibration/resume-calibration-types";
 
 type CalibrationInput = {
   resumeText: string;
@@ -34,8 +34,16 @@ export async function calibrateResumeStructure(input: CalibrationInput): Promise
     };
   }
 
+  // Normalize legacy sections in model output
+  const normalizedEntries = parsed.data.entries.map((entry) => ({
+    ...entry,
+    section: normalizeResumeEntrySection(entry.section),
+    sectionType: entry.sectionType ? normalizeResumeEntrySection(entry.sectionType) : entry.section
+  }));
+
   return {
     ...parsed.data,
+    entries: normalizedEntries,
     modelProvider: result.provider,
     updatedAt: new Date().toISOString()
   };
@@ -67,15 +75,22 @@ function normalizeModelCalibrationEntry(entry: unknown, index: number) {
     ? record.sourceText.trim()
     : [title, record.dateRange, ...bullets].filter(isString).join("\n");
 
+  const id = isString(record.id) && record.id.trim() ? record.id.trim() : crypto.randomUUID();
+  const rawSection = isRawResumeSection(record.section) ? record.section : "other";
+  const section = normalizeResumeEntrySection(rawSection);
+
   return {
-    id: isString(record.id) && record.id.trim() ? record.id.trim() : randomUUID(),
-    section: isResumeSection(record.section) ? record.section : "other",
+    id,
+    candidateId: id,
+    section,
+    sectionType: section,
     title,
     organization: isString(record.organization) ? record.organization : undefined,
     role: isString(record.role) ? record.role : undefined,
     dateRange: isString(record.dateRange) ? record.dateRange : undefined,
     bullets,
     sourceText,
+    rawText: sourceText,
     confidence: isConfidence(record.confidence) ? record.confidence : "medium",
     issues: Array.isArray(record.issues) ? record.issues.filter(isString) : []
   };
@@ -91,7 +106,7 @@ export function calibrateResumeStructureDeterministic(input: CalibrationInput): 
   const parseWarnings = collectParseWarnings(lines);
   const entries: CalibratedResumeEntry[] = [];
   const unclassifiedText: string[] = [];
-  let currentSection: ResumeEntrySection = "other";
+  let currentSection: ResumeEntrySection = "other_needs_review";
   let currentEntry: CalibratedResumeEntry | null = null;
 
   for (const line of lines) {
@@ -109,7 +124,40 @@ export function calibrateResumeStructureDeterministic(input: CalibrationInput): 
       continue;
     }
 
-    if (looksLikeEntryTitle(line)) {
+    // For other_needs_review: auto-create an entry if one doesn't exist yet
+    if (currentSection === "other_needs_review" && !currentEntry) {
+      currentEntry = {
+        id: crypto.randomUUID(),
+        candidateId: "",
+        section: currentSection,
+        sectionType: currentSection,
+        title: line,
+        dateRange: undefined,
+        bullets: [],
+        sourceText: line,
+        rawText: line,
+        confidence: "low",
+        issues: ["无法确定所属模块，请人工确认。"]
+      };
+      currentEntry.candidateId = currentEntry.id;
+      continue;
+    }
+
+    if (currentEntry && shouldAppendLineToCurrentEntry(currentSection, line, currentEntry)) {
+      appendLineToCalibrationEntry(currentEntry, line);
+      continue;
+    }
+
+    // Credential-like content in non-credential context: force section switch
+    if (currentSection !== "credential" && /(CET-?[46]|英语[：:]|雅思|托福|证书|基金从业|驾驶证|从业资格)/iu.test(line)) {
+      if (currentEntry) {
+        entries.push(currentEntry);
+        currentEntry = null;
+      }
+      currentSection = "credential";
+    }
+
+    if (looksLikeEntryTitle(line, currentSection)) {
       if (currentEntry) {
         entries.push(currentEntry);
       }
@@ -117,20 +165,24 @@ export function calibrateResumeStructureDeterministic(input: CalibrationInput): 
       const dateRange = extractDateRange(line);
       const title = stripDateRange(line).trim() || line;
       const issues: string[] = [];
-      if (currentSection === "other") {
+      if (currentSection === "other_needs_review") {
         issues.push("无法确定该经历所属模块，请人工确认。");
       }
 
       currentEntry = {
-        id: randomUUID(),
+        id: crypto.randomUUID(),
+        candidateId: "",
         section: currentSection,
+        sectionType: currentSection,
         title,
         dateRange,
         bullets: [],
         sourceText: line,
-        confidence: currentSection === "other" ? "low" : "medium",
+        rawText: line,
+        confidence: currentSection === "other_needs_review" ? "low" : "medium",
         issues
       };
+      currentEntry.candidateId = currentEntry.id;
       continue;
     }
 
@@ -144,6 +196,12 @@ export function calibrateResumeStructureDeterministic(input: CalibrationInput): 
 
   if (currentEntry) {
     entries.push(currentEntry);
+  }
+
+  // Normalize any legacy sections to canonical
+  for (const entry of entries) {
+    entry.section = normalizeResumeEntrySection(entry.section);
+    entry.sectionType = entry.sectionType ? normalizeResumeEntrySection(entry.sectionType) : entry.section;
   }
 
   const hasLowConfidence = entries.some((entry) => entry.confidence === "low" || entry.issues.length > 0);
@@ -175,16 +233,93 @@ function extractPersonalInfo(lines: string[]) {
 
 function detectSectionHeading(line: string): ResumeEntrySection | null {
   const compact = line.replace(/^#{1,6}\s*/u, "").replace(/\s+/g, "");
-  if (/^(个人优势|自我评价|个人总结|核心优势)$/u.test(compact)) return "summary";
+  if (/^(个人优势|个人概述|自我评价|个人总结|核心优势)$/u.test(compact)) return "summary";
   if (/^(工作经历|工作经验|职业经历|任职经历|实习经历)$/u.test(compact)) return "work";
   if (/^(项目经历|项目经验|个人项目|代表项目)$/u.test(compact)) return "project";
   if (/^(教育背景|教育经历|学历背景|学习经历)$/u.test(compact)) return "education";
-  if (/^(技能与证书|技能证书|专业技能|技能|证书|语言能力|补充信息)$/u.test(compact)) return "supplement";
+  if (/^(技能与证书|技能证书|专业技能|技能|证书|语言能力)$/u.test(compact)) return "credential";
+  if (/^(其他信息|其他|附加信息|补充)$/u.test(compact)) return "other_needs_review";
   return null;
 }
 
-function looksLikeEntryTitle(line: string) {
-  return Boolean(extractDateRange(line)) || /(大学|学院|公司|项目|产品|经理|负责人|实习|本科|硕士|博士|技能|证书|英语|CET|雅思|托福)/iu.test(line);
+function looksLikeEntryTitle(line: string, currentSection?: ResumeEntrySection) {
+  if (extractDateRange(line)) return true;
+  // Credential-like keywords should only create entry titles in credential context
+  if (/(技能|证书|英语|CET|雅思|托福|基金从业|驾驶证|从业资格)/iu.test(line)) {
+    return currentSection === "credential";
+  }
+  const cleaned = line.replace(/^\d+[.)、]\s*/u, "").trim();
+  if (currentSection === "work") {
+    return /[|｜]/u.test(cleaned) && /(运营|经理|工程师|专员|分析|顾问|实习|负责人|产品|内容|数据|客服|柜员)/iu.test(cleaned);
+  }
+  if (currentSection === "project") {
+    return cleaned.length <= 42 && /(项目|流程|优化|产品|工具|内容|AI|Agent|系统|平台|工作流)/iu.test(cleaned);
+  }
+  return /(大学|学院|公司|项目|产品|经理|负责人|实习|本科|硕士|博士)/iu.test(line);
+}
+
+function shouldAppendLineToCurrentEntry(
+  section: ResumeEntrySection,
+  line: string,
+  currentEntry: CalibratedResumeEntry
+) {
+  const dateRange = extractDateRange(line);
+  const rest = stripDateRange(line).trim();
+
+  if (section === "education") {
+    return Boolean(dateRange) && rest.length === 0 && Boolean(currentEntry.title);
+  }
+
+  if (section === "summary") {
+    return !dateRange;
+  }
+
+  if (section === "work" || section === "project") {
+    if (dateRange) {
+      return false;
+    }
+
+    return isExperienceContinuationLine(line);
+  }
+
+  if (section === "credential") {
+    return !dateRange && !/^(技能|证书|语言|英语|CET)/iu.test(line);
+  }
+
+  if (section === "other_needs_review") {
+    return !dateRange;
+  }
+
+  return false;
+}
+
+function appendLineToCalibrationEntry(entry: CalibratedResumeEntry, line: string) {
+  const dateRange = extractDateRange(line);
+  const rest = stripDateRange(line).trim();
+
+  if (dateRange && rest.length === 0) {
+    entry.dateRange = entry.dateRange ?? dateRange;
+    entry.sourceText = `${entry.sourceText}\n${line}`;
+    entry.rawText = entry.sourceText;
+    return;
+  }
+
+  entry.bullets.push(line);
+  entry.sourceText = `${entry.sourceText}\n${line}`;
+  entry.rawText = entry.sourceText;
+}
+
+function isExperienceContinuationLine(line: string) {
+  const cleaned = line.trim();
+  if (!cleaned) {
+    return false;
+  }
+
+  return (
+    cleaned.length > 28 ||
+    /[，。；：:、]/u.test(cleaned) ||
+    /^(独立|输出|定义|核心模块|核心|关键|策划|验证|完成|基于|通过|流程优化|B\s*端|复杂问题|协助|主导|负责|参与|搭建|推进|优化|制定|支持|推动|提升|梳理|运营|发布|覆盖|单篇|系列)/iu.test(cleaned)
+  );
 }
 
 function normalizeResumeLine(line: string) {
@@ -256,7 +391,11 @@ function isCalibrationStatus(value: unknown): value is CalibratedResumeProfile["
 }
 
 function isResumeSection(value: unknown): value is ResumeEntrySection {
-  return value === "summary" || value === "work" || value === "project" || value === "education" || value === "supplement" || value === "other";
+  return value === "summary" || value === "work" || value === "project" || value === "education" || value === "credential" || value === "personal_info" || value === "other_needs_review";
+}
+
+function isRawResumeSection(value: unknown): value is string {
+  return isResumeSection(value) || value === "supplement" || value === "other";
 }
 
 function isConfidence(value: unknown): value is CalibratedResumeEntry["confidence"] {

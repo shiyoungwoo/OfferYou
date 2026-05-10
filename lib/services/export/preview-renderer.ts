@@ -222,6 +222,10 @@ function renderProfessionalCnHtml(document: ResumeDocument) {
         border-radius: 999px;
         background: var(--text-gray);
       }
+      .text-item strong {
+        color: var(--primary);
+        font-weight: 700;
+      }
 
       /* ── Entry items ── */
       .entry {
@@ -450,6 +454,10 @@ function renderAtsCleanHtml(document: ResumeDocument) {
         line-height: 1.5;
         color: #334155;
       }
+      .text-item strong {
+        color: #1e3a70;
+        font-weight: 700;
+      }
       .entry {
         display: flex;
         flex-direction: column;
@@ -557,11 +565,22 @@ function renderSection(section: ResumeDocumentSection, className = "standard") {
                       : ""
                   }
                 </li>`
-              : `<li class="text-item">${escapeHtml(item.text)}</li>`
+              : `<li class="text-item">${renderTextItem(item.text)}</li>`
           )
           .join("")}
       </ul>
     </section>`;
+}
+
+function renderTextItem(text: string) {
+  const colonMatch = text.match(/^\s*([\u4e00-\u9fa5A-Za-z0-9＋+&/（）()·\s]{2,24})\s*[:：]\s*(.+)$/su);
+  if (!colonMatch) {
+    return escapeHtml(text);
+  }
+
+  const label = colonMatch[1].trim();
+  const content = colonMatch[2].trim();
+  return `<strong>${escapeHtml(label)}：</strong>${escapeHtml(content)}`;
 }
 
 export function getRenderableSections(sections: ResumeDocumentSection[]) {

@@ -216,21 +216,15 @@ function buildWorkExperienceItems(
   const suggestionEntries = suggestions
     .filter((suggestion) => isSuggestionForSection(suggestion, ["experience"]) && !isInternshipLike(suggestion.afterText))
     .map((suggestion) => createSuggestionEntry(suggestion))
-    .filter((entry) => !isGenericWorkEntry(entry));
-  if (suggestionEntries.length > 0) {
-    return dedupeEntries(suggestionEntries)
-      .sort((a, b) => {
-        const internshipDelta = Number(isInternshipEntry(a)) - Number(isInternshipEntry(b));
-        if (internshipDelta !== 0) {
-          return internshipDelta;
-        }
-
-        return scoreEntryForRole(b, roleContext) - scoreEntryForRole(a, roleContext);
-      })
-      .map((entry, index) => compactEntryForOnePage(entry, roleContext, index, "work"))
-      .slice(0, 3);
-  }
-
+    .filter((entry) => !isGenericWorkEntry(entry))
+    .filter((entry) => {
+      // Guard: reject entries whose heading or body text is education/credential-like
+      const heading = entry.heading ?? "";
+      const body = `${entry.summary ?? ""}\n${(entry.bullets ?? []).join("\n")}`;
+      if (isEducationOrCredentialLikeText(heading)) return false;
+      if (isEducationOrCredentialLikeText(body) && !isWorkLikeText(body)) return false;
+      return true;
+    });
   const rewrittenWorkKeys = suggestionEntries.map((entry) => normalizeResumeEntryKey(entry));
   const uniqueResumeWork = resumeSections.work.filter(
     (entry) => !isGenericWorkEntry(entry) && !rewrittenWorkKeys.includes(normalizeResumeEntryKey(entry))
@@ -259,7 +253,7 @@ function buildWorkExperienceItems(
 
   return buildExperienceSectionItems(
     suggestions,
-    ["experience", "summary"],
+    ["experience"],
     `请补充与 ${roleContext.targetTitle} 最相关的正式工作经历，优先写职责、结果和协作对象。`
   );
 }
@@ -272,14 +266,14 @@ function buildProjectItems(
 ) {
   const projectSuggestions = suggestions
     .filter((suggestion) => isSuggestionForSection(suggestion, ["project"]))
-    .map((suggestion) => createSuggestionEntry(suggestion));
-  if (projectSuggestions.length > 0) {
-    return dedupeEntries(projectSuggestions)
-      .sort((a, b) => scoreEntryForRole(b, roleContext) - scoreEntryForRole(a, roleContext))
-      .map((entry, index) => compactEntryForOnePage(entry, roleContext, index, "project"))
-      .slice(0, 3);
-  }
-
+    .map((suggestion) => createSuggestionEntry(suggestion))
+    .filter((entry) => {
+      const heading = entry.heading ?? "";
+      const body = `${entry.summary ?? ""}\n${(entry.bullets ?? []).join("\n")}`;
+      if (isEducationOrCredentialLikeText(heading)) return false;
+      if (isEducationOrCredentialLikeText(body) && !isProjectLikeText(body)) return false;
+      return true;
+    });
   const rewrittenProjectKeys = projectSuggestions.map((entry) => normalizeEntryHeadingKey(entry.heading));
   const uniqueResumeProjects = resumeSections.projects.filter(
     (entry) => !rewrittenProjectKeys.includes(normalizeEntryHeadingKey(entry.heading))
@@ -290,7 +284,7 @@ function buildProjectItems(
       heading: fact.title,
       summary: fact.summary
     }));
-  const items = dedupeEntries([...projectSuggestions, ...uniqueResumeProjects, ...factProjects]);
+  const items = dedupeEntries(normalizeProjectEntries([...projectSuggestions, ...uniqueResumeProjects, ...factProjects]));
 
   if (items.length > 0) {
     return items
@@ -302,13 +296,74 @@ function buildProjectItems(
   return toTextItems(["请补充与你申请岗位最相关的项目经历，写清目标、动作和结果。"]);
 }
 
+function normalizeProjectEntries(entries: ParsedResumeEntry[]): ParsedResumeEntry[] {
+  const normalized: ParsedResumeEntry[] = [];
+
+  for (const entry of entries) {
+    const previous = normalized.at(-1);
+    if (previous && isProjectBodyOnlyEntry(entry)) {
+      appendProjectBodyToEntry(previous, entry);
+      continue;
+    }
+
+    normalized.push(entry);
+  }
+
+  return normalized;
+}
+
+function isProjectBodyOnlyEntry(entry: ParsedResumeEntry) {
+  if (entry.meta || entry.subheading) {
+    return false;
+  }
+
+  const text = [entry.heading, entry.summary, ...(entry.bullets ?? [])].filter(Boolean).join(" ");
+  return isSentenceLikeHeading(entry.heading) || /^(定义|输出|核心模块|关键|策划|验证|完成|独立|通过|基于|「Codex|\u300cCodex)/u.test(text);
+}
+
+function appendProjectBodyToEntry(target: ParsedResumeEntry, source: ParsedResumeEntry) {
+  const lines = [source.heading, source.summary, ...(source.bullets ?? [])]
+    .map((line) => cleanDisplayLine(line ?? ""))
+    .filter(isDisplayableResumeLine);
+
+  if (lines.length === 0) {
+    return;
+  }
+
+  target.bullets = dedupeItems([...(target.bullets ?? []), ...lines]);
+}
+
+function mergeDateOnlyEducationEntries(entries: ParsedResumeEntry[]): ParsedResumeEntry[] {
+  const merged: ParsedResumeEntry[] = [];
+
+  for (const entry of entries) {
+    const dateOnly = extractDateRange([entry.heading, entry.summary].filter(Boolean).join(" "));
+    const previous = merged.at(-1);
+
+    if (previous && dateOnly.dateRange && !dateOnly.rest.trim() && !entry.subheading && !entry.meta) {
+      previous.meta = previous.meta ?? dateOnly.dateRange;
+      continue;
+    }
+
+    merged.push(entry);
+  }
+
+  return merged;
+}
+
 function formatEducationSummary(entry?: ParsedResumeEntry) {
   if (!entry) {
     return "";
   }
 
-  const degree = entry.subheading?.split("｜").map((item) => item.trim()).find((item) => isDegreeLike(item));
-  return [entry.heading, degree].filter(Boolean).join(" · ");
+  const parts = [entry.heading, entry.subheading ?? ""]
+    .join(" ｜ ")
+    .split(/[|｜·]/u)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const school = parts.find((item) => /大学|学院|学校|University|College|School|Institute/iu.test(item)) ?? entry.heading;
+  const degree = parts.find((item) => isDegreeLike(item));
+  return [school, degree].filter(Boolean).join(" · ");
 }
 
 function buildEducationItems(
@@ -317,7 +372,7 @@ function buildEducationItems(
   _suggestions: PersistedWorkspaceDraft["suggestions"] = []
 ) {
   const rawEducationEntries = draft.calibratedResume ? [] : extractRawSectionEntries(draft.resumeExtractedText ?? "", "education");
-  const items = dedupeEntries([
+  const items = dedupeEntries(mergeDateOnlyEducationEntries([
     ...rawEducationEntries,
     ...resumeSections.education,
     ...(draft.masterFactsUsed ?? [])
@@ -326,7 +381,7 @@ function buildEducationItems(
         heading: fact.title,
         summary: fact.summary
       }))
-  ]);
+  ]));
 
   if (items.length > 0) {
     // Allow up to 2 education entries (e.g. bachelor + master)
@@ -387,7 +442,7 @@ function buildResumeDataFromCalibratedResume(calibratedResume: CalibratedResumeP
       .filter((entry) => entry.section === "project")
       .map((entry) => mapCalibratedEntryToParsedResumeEntry(entry, "project")),
     skills: calibratedResume.entries
-      .filter((entry) => entry.section === "supplement")
+      .filter((entry) => entry.section === "credential")
       .flatMap((entry) => [entry.title, ...(entry.bullets ?? [])])
       .map((line) => cleanResumeLine(line))
       .filter(Boolean)
@@ -433,7 +488,10 @@ function mapCalibratedEntryToParsedResumeEntry(
       .map((part) => part.trim())
       .filter(Boolean);
     const degree = educationParts.find((part) => isDegreeLike(part)) ?? educationParts[0] ?? "";
-    const major = educationParts.find((part) => /专业|major|方向/i.test(part)) ?? "";
+    const major =
+      educationParts.find((part) => part !== degree && !isDateLikeText(part)) ??
+      educationParts.find((part) => /专业|major|方向/i.test(part)) ??
+      "";
     const summary = entry.bullets.join(" ").trim();
 
     return {
@@ -450,7 +508,7 @@ function mapCalibratedEntryToParsedResumeEntry(
       heading: entry.title,
       subheading: entry.organization || entry.role,
       meta: entry.dateRange,
-      summary: entry.bullets.join(" ").trim() || undefined,
+      summary: undefined,
       bullets: entry.bullets.length > 0 ? entry.bullets : undefined
     };
   }
@@ -459,7 +517,7 @@ function mapCalibratedEntryToParsedResumeEntry(
     heading: entry.organization || entry.title,
     subheading: entry.role || undefined,
     meta: entry.dateRange,
-    summary: entry.bullets.join(" ").trim() || undefined,
+    summary: undefined,
     bullets: entry.bullets.length > 0 ? entry.bullets : undefined
   };
 }
@@ -1359,8 +1417,8 @@ function normalizeSuggestionSection(section: string) {
     return "education";
   }
 
-  if (["supplement", "skills", "skill", "certificate", "补充信息", "技能", "技能与证书", "证书"].includes(normalized)) {
-    return "supplement";
+  if (["supplement", "skills", "skill", "certificate", "credential", "补充信息", "技能", "技能与证书", "证书"].includes(normalized)) {
+    return "credential";
   }
 
   return section;
@@ -1384,21 +1442,31 @@ function dedupeParsedEntries(items: ParsedResumeEntry[]) {
 }
 
 function toEntryItem(item: ParsedResumeEntry): ResumeDocumentEntryItem {
+  const summary = item.summary ? cleanDisplayLine(item.summary) : undefined;
+  const bullets = mergeBrokenBulletFragments([
+    ...(isDisplayableResumeLine(summary) ? [summary] : []),
+    ...(item.bullets?.map(cleanDisplayLine).filter(isDisplayableResumeLine) ?? [])
+  ]);
+
   return {
     type: "entry",
-    heading: item.heading,
-    subheading: item.subheading,
-    meta: item.meta,
-    summary: item.summary,
-    bullets: item.bullets?.filter(Boolean)
+    heading: cleanDisplayLine(item.heading),
+    subheading: item.subheading ? cleanDisplayLine(item.subheading) : undefined,
+    meta: item.meta ? cleanDisplayLine(item.meta) : undefined,
+    // Keep entry body as one bullet list. Rendering summary and bullets as two
+    // separate lists makes the PDF look like a nested/sub-list even when it is not.
+    bullets: bullets.length > 0 ? bullets : undefined
   };
 }
 
 function toTextItems(items: string[]): ResumeDocumentItem[] {
-  return items.map((item) => ({
-    type: "text",
-    text: item
-  }));
+  return items
+    .map(cleanPlainTextItemLine)
+    .filter(isDisplayableResumeLine)
+    .map((item) => ({
+      type: "text",
+      text: item
+    }));
 }
 
 function createSuggestionEntry(suggestion: SnapshotSuggestion): ParsedResumeEntry {
@@ -1506,6 +1574,9 @@ function deriveSuggestionEntryHeading(suggestion: SnapshotSuggestion) {
   }
 
   const title = cleanGeneratedResumeText(suggestion.title).replace(/(?:改写|优化|建议)$/u, "").trim();
+  if (isSentenceLikeHeading(title)) {
+    return normalizeSuggestionSection(suggestion.section) === "project" ? "岗位相关项目" : "岗位相关经历";
+  }
   return title && !/^(accepted|suggestion|ai)$/i.test(title) ? title : "岗位相关经历";
 }
 
@@ -1514,10 +1585,12 @@ function splitIntoBullets(text: string) {
   // Do NOT split on 。(Chinese period) — it is a sentence terminator within a bullet,
   // not a delimiter between separate bullet points. Splitting on 。 causes each
   // sub-clause of a run-on sentence to get its own bullet marker, which is wrong.
-  return text
+  return mergeBrokenBulletFragments(
+    text
     .split(/[；;\n]/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+    .map((part) => cleanDisplayLine(part))
+    .filter((part) => part.length > 0)
+  );
 }
 
 function appendLineToLastEntry(entries: ParsedResumeEntry[], line: string) {
@@ -1554,7 +1627,8 @@ function splitStrengthText(text: string, isOriginal: boolean = false) {
 
   // If it's a block of text, try to split by common markers if they look like bullets
   let processed = cleaned;
-  if (!cleaned.includes("\n") && (cleaned.includes("：") || cleaned.includes(":"))) {
+  const colonCount = (cleaned.match(/[：:]/gu) ?? []).length;
+  if (!cleaned.includes("\n") && colonCount >= 2) {
     // If there are multiple colons, it might be a list formatted as "Label: Content Label: Content"
     processed = cleaned.replace(/(?=[^：:\s]{2,12}[:：])/gu, "\n");
   }
@@ -1562,7 +1636,13 @@ function splitStrengthText(text: string, isOriginal: boolean = false) {
   return processed
     .split(/[\n。；]+/u)
     .map((s) => s.trim())
-    .filter((item) => isResumeReadyChineseLine(item) && item.length >= 8)
+    .filter(
+      (item) =>
+        isResumeReadyChineseLine(item) &&
+        item.length >= 8 &&
+        !isInternalAdviceLine(item) &&
+        !isOcrPageArtifactLine(item)
+    )
     .map((item) => item.replace(/^[，、；\s]+/u, ""));
 }
 
@@ -1573,4 +1653,108 @@ function isResumeReadyChineseLine(text: string) {
   }
 
   return /[\u4e00-\u9fa5]/u.test(cleaned);
+}
+
+function cleanDisplayLine(value: string) {
+  return cleanGeneratedResumeText(value)
+    .replace(/^\s*[-•·▪–—]\s*/u, "")
+    .replace(/^\s*>+\s*/u, "")
+    .replace(/\s+\|\s+/g, " ｜ ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanPlainTextItemLine(value: string) {
+  return cleanGeneratedResumeText(value)
+    .replace(/^\s*[-•·▪–—]\s*/u, "")
+    .replace(/^\s*>+\s*/u, "")
+    .replace(/^(学历：[^|｜]+)\s*[|｜]\s*([^|｜]+)$/u, "$1 · $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function mergeBrokenBulletFragments(items: string[]) {
+  const merged: string[] = [];
+
+  for (const value of items) {
+    const item = cleanDisplayLine(value).trim();
+    if (!item) {
+      continue;
+    }
+
+    const previous = merged.at(-1);
+    if (previous && shouldMergeBulletFragments(previous, item)) {
+      merged[merged.length - 1] = mergeBulletFragments(previous, item);
+      continue;
+    }
+
+    merged.push(item);
+  }
+
+  return merged;
+}
+
+function shouldMergeBulletFragments(previous: string, current: string) {
+  const previousCompact = previous.replace(/\s+/g, "").trim();
+  const currentCompact = current.replace(/\s+/g, "").trim();
+
+  if (!previousCompact || !currentCompact) {
+    return false;
+  }
+
+  if (previousCompact.endsWith("一") && currentCompact.startsWith("键")) {
+    return true;
+  }
+
+  return /[、，,；;：:\/｜|（(【\[]$/.test(previousCompact);
+}
+
+function mergeBulletFragments(previous: string, current: string) {
+  return `${previous.replace(/\s+$/u, "")}${current.replace(/^\s+/u, "")}`;
+}
+
+function isDisplayableResumeLine(value: string | undefined): value is string {
+  if (!value) {
+    return false;
+  }
+
+  return !/^[-—–_*\s]{2,}$/.test(value.trim()) && !isInternalAdviceLine(value) && !isOcrPageArtifactLine(value);
+}
+
+function isInternalAdviceLine(value: string) {
+  return /JD\s*缺失能力提醒|缺失能力提醒|建议在|建议补充|例如[：:]|岗位能力待确认/u.test(value);
+}
+
+function isOcrPageArtifactLine(value: string) {
+  const compact = value.replace(/\s+/g, "").trim();
+  return /file:\/\/\/tmp\/|\/tmp\/resume-|第\d+\/\d+[页⻚]|resume-ai-pm\.html|\.html$/iu.test(compact);
+}
+
+function isDateLikeText(value: string) {
+  return /^\d{4}(?:[./-]\d{1,2})?\s*[-–—至到]\s*(?:\d{4}(?:[./-]\d{1,2})?|至今|present)$/iu.test(value.trim());
+}
+
+function isEducationOrCredentialLikeText(text: string) {
+  return /(大学|学院|本科|硕士|博士|学历|教育|CET|英语|雅思|托福|证书|从业资格|驾驶证)/iu.test(text);
+}
+
+function isWorkLikeText(text: string) {
+  return /(公司|银行|集团|科技|岗位|经理|工程师|运营|客户|业务|项目|负责|协助|主导|推进|优化|分析|交付)/iu.test(text);
+}
+
+function isProjectLikeText(text: string) {
+  return /(项目|产品|系统|平台|工具|Agent|AI|MVP|PRD|接口|流程|工作流|上线|发布|迭代)/iu.test(text);
+}
+
+function isSentenceLikeHeading(value: string) {
+  const cleaned = cleanDisplayLine(value);
+  if (!cleaned) {
+    return false;
+  }
+
+  return (
+    cleaned.length > 28 ||
+    /[，。；：:]/u.test(cleaned) ||
+    /^(通过|基于|独立|协助|负责|输出|定义|完成|策划|优化|提升|验证)/u.test(cleaned)
+  );
 }

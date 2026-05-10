@@ -1,9 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { callModelJSON } = vi.hoisted(() => ({
+  callModelJSON: vi.fn()
+}));
+
+vi.mock("@/lib/ai/model-gateway", () => ({
+  callModelJSON
+}));
+
 import {
   buildJDInsight,
+  buildJDInsightWithModel,
   buildRewriteStrategy,
   selectJDAbilityLabel
 } from "@/lib/services/analysis/jd-insight";
+
+beforeEach(() => {
+  callModelJSON.mockReset();
+});
 
 describe("jd insight", () => {
   it("extracts concrete JD abilities instead of generic placeholder labels", () => {
@@ -48,5 +62,50 @@ describe("jd insight", () => {
       text: "通过 Prompt 迭代优化 AI 简历改写链路。",
       jdInsight: insight
     })).toBe("AI 工具 / Prompt 应用");
+  });
+
+  it("uses model-first JD insight when the provider returns concrete abilities", async () => {
+    callModelJSON.mockResolvedValue({
+      provider: "openai_compatible",
+      generationMode: "model",
+      data: {
+        company: "图灵文化",
+        jobTitle: "AI 应用工程师 / AI 产品经理",
+        hardRequirements: ["熟悉 AI 工具和 Prompt Engineering"],
+        coreAbilities: ["AI 翻译工作流优化", "新媒体 AI 化运营", "Prompt Engineering"],
+        bonusItems: ["深度用户和早期体验者"],
+        avoidItems: ["不要编造技术栈"],
+        sourceKeywords: ["AI 翻译工作流优化", "新媒体 AI 化运营", "Prompt Engineering"]
+      }
+    });
+
+    const result = await buildJDInsightWithModel({
+      company: "图灵文化",
+      jobTitle: "AI 应用工程师 / AI 产品经理",
+      jdText: "AI 翻译工作流优化；新媒体 AI 化运营；熟悉 Prompt Engineering。"
+    });
+
+    expect(callModelJSON).toHaveBeenCalledWith(expect.objectContaining({ task: "jd_analysis" }));
+    expect(result.insight.generationMode).toBe("model");
+    expect(result.insight.coreAbilities).toEqual(expect.arrayContaining(["AI 翻译工作流优化", "Prompt Engineering"]));
+    expect(result.insight.coreAbilities.join(" ")).not.toContain("目标岗位要求的动作");
+  });
+
+  it("falls back visibly when JD insight model is unavailable", async () => {
+    callModelJSON.mockResolvedValue({
+      provider: "deterministic_fallback",
+      generationMode: "deterministic_fallback",
+      fallbackReason: "未检测到小米 MiMo / OpenAI 兼容配置，已切换到确定性回退。",
+      data: buildJDInsight({
+        jdText: "需要 AI 产品、工作流设计、跨部门协作和作品集案例。"
+      })
+    });
+
+    const result = await buildJDInsightWithModel({
+      jdText: "需要 AI 产品、工作流设计、跨部门协作和作品集案例。"
+    });
+
+    expect(result.insight.generationMode).toBe("deterministic_fallback");
+    expect(result.riskNotes.join(" ")).toContain("JD 理解模型降级原因");
   });
 });

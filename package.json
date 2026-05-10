@@ -14,13 +14,11 @@
     "export:fixtures": "node --experimental-transform-types --import ./scripts/register-alias.mjs scripts/export-job-apply-fixtures.mjs",
     "report:self-use": "node --experimental-transform-types --import ./scripts/register-alias.mjs scripts/run-self-use-beta-report.mjs",
     "report:real-trial": "node --experimental-transform-types --import ./scripts/register-alias.mjs scripts/run-real-self-use-trial.mjs",
-    "check:vnext": "node scripts/check-vnext-mvp.mjs",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate:dev": "prisma migrate dev"
+    "check:vnext": "node scripts/check-vnext-mvp.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@prisma/client": "^6.5.0",
+    "better-sqlite3": "^12.9.0",
     "lucide-react": "^1.0.0",
     "next": "^15.2.3",
     "pdf-parse": "1.1.1",
@@ -33,6 +31,7 @@
     "@playwright/test": "^1.51.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.13.10",
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19.0.11",
@@ -40,9 +39,11 @@
     "autoprefixer": "^10.4.20",
     "jsdom": "^26.0.0",
     "postcss": "^8.5.3",
-    "prisma": "^6.5.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2",
     "vitest": "^3.0.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3"]
   }
 }

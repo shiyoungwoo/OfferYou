@@ -30,6 +30,10 @@ export function ModelProviderStatusCard({ providers }: ModelProviderStatusCardPr
                 {provider.default ? <StatusPill tone="accent">默认</StatusPill> : null}
               </div>
             </div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              已配置：{provider.configured ? "是" : "否"} · 已认证：{provider.authenticated ? "是" : "否"} · 可调用：
+              {provider.callable ? "是" : "否"}
+            </p>
             <ProviderCapabilitySummary providerKey={provider.key} />
           </div>
         ))}

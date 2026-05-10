@@ -27,7 +27,7 @@ describe("createDraftInputSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("reuses confirmed master facts in new draft analysis seeds", async () => {
+  it("reuses confirmed master facts but does not fabricate suggestions when the model is unavailable", async () => {
     await createMasterFact({
       userId: "default-user",
       title: "Workflow instrumentation rollout",
@@ -46,8 +46,9 @@ describe("createDraftInputSchema", () => {
     });
 
     expect(draft.analysis.fitScore).toBeGreaterThan(0);
-    expect(draft.suggestions.some((suggestion) => suggestion.title === "Workflow instrumentation rollout")).toBe(true);
-    expect(draft.suggestions.some((suggestion) => suggestion.sourceKind === "master_fact")).toBe(true);
+    expect(draft.masterFactsUsed.some((fact) => fact.title === "Workflow instrumentation rollout")).toBe(true);
+    expect(draft.suggestions).toEqual([]);
+    expect(draft.analysis.riskNotes.join(" ")).toContain("基础编辑模式");
   });
 
   it("injects confirmed talent profile and selected career direction into the draft context", async () => {

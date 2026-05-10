@@ -1,6 +1,6 @@
 import { callModelJSON } from "@/lib/ai/model-gateway";
 import { getDefaultModelProvider } from "@/lib/ai/model-provider-config";
-import { buildJDInsight, buildRewriteStrategy } from "@/lib/services/analysis/jd-insight";
+import { buildJDInsight, buildJDInsightWithModel, buildRewriteStrategy } from "@/lib/services/analysis/jd-insight";
 import { generateSeedSuggestions, generateAISuggestions } from "@/lib/services/analysis/suggestion-generator";
 import type { CalibratedResumeProfile } from "@/lib/services/calibration/resume-calibration-types";
 import type { JDInsight, RewriteStrategy } from "@/lib/services/job-apply/agent-run";
@@ -111,44 +111,74 @@ export async function analyzeDraft(input: AnalysisInput): Promise<AnalysisResult
   }
 
   const normalizedResponse = normalizeGeminiAnalysisResponse(response.data);
-  const riskNotes = mergeRiskNotes(normalizedResponse.riskNotes, response.fallbackReason);
-  const jdInsight = buildJDInsight({
+
+  if (response.generationMode === "deterministic_fallback") {
+    return buildBasicEditorAnalysisResult({
+      input,
+      optimizationMode,
+      normalizedResponse,
+      fallbackReason: response.fallbackReason ?? "模型不可用，已进入基础编辑模式。"
+    });
+  }
+
+  const jdInsightResult = await buildJDInsightWithModel({
     jdText: input.jdText,
     company: input.company,
     jobTitle: input.jobTitle,
     gaps: normalizedResponse.gaps,
     keywordsToBridge: normalizedResponse.keywordsToBridge
   });
+
+  if (jdInsightResult.generationMode === "deterministic_fallback") {
+    return buildBasicEditorAnalysisResult({
+      input,
+      optimizationMode,
+      normalizedResponse,
+      fallbackReason: jdInsightResult.fallbackReason ?? "JD 理解模型不可用，已进入基础编辑模式。",
+      extraRiskNotes: jdInsightResult.riskNotes
+    });
+  }
+
+  const riskNotes = [
+    ...mergeRiskNotes(normalizedResponse.riskNotes, response.fallbackReason),
+    ...jdInsightResult.riskNotes
+  ];
+  const jdInsight = jdInsightResult.insight;
   const rewriteStrategy = buildRewriteStrategy(jdInsight);
-  const suggestions =
-    response.provider !== "deterministic_fallback"
-      ? await generateAISuggestions(
-          {
-            jdText: input.jdText,
-            company: input.company,
-            jobTitle: input.jobTitle,
-            talentHeadline: input.talentProfile?.headline,
-            selectedCareerDirectionLabel: input.careerDirection?.label,
-            facts: input.facts,
-            calibratedResume: input.calibratedResume,
-            gaps: normalizedResponse.gaps,
-            keywordsToBridge: normalizedResponse.keywordsToBridge,
-            jdInsight,
-            rewriteStrategy
-          },
-          { modelProvider: response.provider }
-        )
-      : generateSeedSuggestions(input);
+  const suggestions = await generateAISuggestions(
+    {
+      jdText: input.jdText,
+      company: input.company,
+      jobTitle: input.jobTitle,
+      talentHeadline: input.talentProfile?.headline,
+      selectedCareerDirectionLabel: input.careerDirection?.label,
+      facts: input.facts,
+      calibratedResume: input.calibratedResume,
+      gaps: normalizedResponse.gaps,
+      keywordsToBridge: normalizedResponse.keywordsToBridge,
+      jdInsight,
+      rewriteStrategy
+    },
+    { modelProvider: response.provider }
+  );
+
+  const modelSuggestions = suggestions.filter((suggestion) => suggestion.generationMode !== "deterministic_fallback");
+  const rewriteRiskNotes = modelSuggestions.length === suggestions.length
+    ? riskNotes
+    : [
+        ...riskNotes,
+        "AI 改写模型不可用或返回无效内容，已进入基础编辑模式，未生成伪 AI 改写建议。"
+      ];
 
   return {
     fitScore: normalizedResponse.fitScore,
     optimizationMode,
     strengths: normalizedResponse.strengths,
     gaps: normalizedResponse.gaps,
-    riskNotes,
+    riskNotes: rewriteRiskNotes,
     jdInsight,
     rewriteStrategy,
-    suggestions
+    suggestions: modelSuggestions
   };
 }
 
@@ -172,25 +202,50 @@ function analyzeDraftDeterministic(
     keywordsToBridge: deterministic.keywordsToBridge
   });
   const rewriteStrategy = buildRewriteStrategy(jdInsight);
-    const suggestions = generateSeedSuggestions({
-      jdText: input.jdText,
-      company: input.company,
-      jobTitle: input.jobTitle,
-      talentHeadline: input.talentProfile?.headline,
-      selectedCareerDirectionLabel: input.careerDirection?.label,
-      facts: input.facts,
-      calibratedResume: input.calibratedResume,
-    });
-
   return {
     fitScore: deterministic.fitScore,
     optimizationMode,
     strengths: deterministic.strengths,
     gaps: deterministic.gaps,
-    riskNotes: mergeRiskNotes(deterministic.riskNotes, fallbackReason),
+    riskNotes: [
+      ...mergeRiskNotes(deterministic.riskNotes, fallbackReason),
+      "模型不可用，已进入基础编辑模式，未生成 AI 改写建议。"
+    ],
     jdInsight,
     rewriteStrategy,
-    suggestions
+    suggestions: []
+  };
+}
+
+function buildBasicEditorAnalysisResult(input: {
+  input: AnalysisInput;
+  optimizationMode: "baseline_jd_match" | "talent_amplified";
+  normalizedResponse: GeminiAnalysisResponse;
+  fallbackReason: string;
+  extraRiskNotes?: string[];
+}): AnalysisResult {
+  const jdInsight = buildJDInsight({
+    jdText: input.input.jdText,
+    company: input.input.company,
+    jobTitle: input.input.jobTitle,
+    gaps: input.normalizedResponse.gaps,
+    keywordsToBridge: input.normalizedResponse.keywordsToBridge
+  });
+  const rewriteStrategy = buildRewriteStrategy(jdInsight);
+
+  return {
+    fitScore: input.normalizedResponse.fitScore,
+    optimizationMode: input.optimizationMode,
+    strengths: input.normalizedResponse.strengths,
+    gaps: input.normalizedResponse.gaps,
+    riskNotes: [
+      ...mergeRiskNotes(input.normalizedResponse.riskNotes, input.fallbackReason),
+      ...(input.extraRiskNotes ?? []),
+      "模型不可用，已进入基础编辑模式，未生成 AI 改写建议。"
+    ],
+    jdInsight,
+    rewriteStrategy,
+    suggestions: []
   };
 }
 

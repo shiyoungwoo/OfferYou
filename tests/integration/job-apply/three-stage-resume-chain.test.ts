@@ -1,11 +1,56 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/ai/model-gateway", () => ({
-  callModelJSON: vi.fn(async () => ({
-    provider: "deterministic_fallback",
-    data: null,
-    fallbackReason: "mocked fallback"
-  }))
+  callModelJSON: vi.fn(async (options: { task?: string; userPrompt?: string }) => {
+    if (options.task === "jd_analysis") {
+      return {
+        provider: "openai_compatible",
+        generationMode: "model",
+        data: {
+          company: "OfferYou",
+          jobTitle: "AI 产品经理",
+          hardRequirements: ["岗位定制", "Prompt 迭代", "工作流设计"],
+          coreAbilities: ["岗位定制", "Prompt 迭代", "工作流设计", "结果表达"],
+          bonusItems: ["AI 产品实践"],
+          avoidItems: ["不改写公司、学历和时间"],
+          sourceKeywords: ["岗位定制", "Prompt 迭代", "工作流设计", "结果表达"]
+        }
+      };
+    }
+
+    if (options.userPrompt?.includes('"suggestions"')) {
+      return {
+        provider: "openai_compatible",
+        generationMode: "model",
+        data: {
+          suggestions: [
+            {
+              candidateId: "project-1",
+              section: "project",
+              title: "OfferYou 项目岗位化改写",
+              before: "OfferYou AI 岗位定制简历助手 2026.03 - 至今",
+              after: "OfferYou AI 岗位定制简历助手 2026.03 - 至今\n- 独立完成产品定义与 MVP 范围收敛，设计岗位定制、Prompt 迭代与简历快照生成链路。",
+              reason: "对应 JD 中岗位定制、Prompt 迭代和工作流设计要求。",
+              jdAbility: "岗位定制",
+              factAnchors: ["独立完成产品定义与 MVP 范围收敛"]
+            }
+          ]
+        }
+      };
+    }
+
+    return {
+      provider: "openai_compatible",
+      generationMode: "model",
+      data: {
+        fitScore: 82,
+        strengths: ["OfferYou 项目与岗位定制、Prompt 迭代要求相关。"],
+        gaps: ["需要补足结果表达。"],
+        keywordsToBridge: ["岗位定制", "Prompt 迭代", "工作流设计"],
+        riskNotes: []
+      }
+    };
+  })
 }));
 
 vi.mock("@/lib/services/export/pdf-export-service", () => ({

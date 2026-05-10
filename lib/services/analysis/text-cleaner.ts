@@ -49,6 +49,7 @@ export function cleanOriginalResumeText(text: string) {
 
 export function cleanGeneratedResumeText(text: string) {
   return normalizeOcrResumeText(text)
+    .replace(/^\s*>+\s?/gmu, "")
     .replace(/([产品项目])OfferYou/gu, "$1 OfferYou")
     .replace(/^围绕[^，。；]{2,48}[，。；]\s*/u, "")
     // Remove common AI preambles that users find annoying
@@ -59,6 +60,7 @@ export function cleanGeneratedResumeText(text: string) {
     .replace(/，?保留原有事实基础并突出可迁移能力。?$/u, "")
     .replace(/\*\*/g, "")
     .replace(/`/g, "")
+    .replace(/^\s*[•·▪]\s*/gmu, "- ")
     .replace(/[^\S\r\n]+/g, " ")
     .replace(/ *\r?\n+ */g, "\n")
     .replace(/\n{3,}/g, "\n\n")

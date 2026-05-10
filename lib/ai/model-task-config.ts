@@ -1,6 +1,6 @@
 import type { ModelProviderKey } from "@/lib/ai/model-provider-config";
 
-export type ModelTaskKey = "gap_analysis" | "rewrite" | "talent" | "interview" | "self_intro" | "resume_calibration";
+export type ModelTaskKey = "gap_analysis" | "jd_analysis" | "rewrite" | "talent" | "interview" | "self_intro" | "resume_calibration";
 
 export type ModelTaskConfig = {
   task: ModelTaskKey;
@@ -12,6 +12,11 @@ const TASK_CONFIGS: Record<ModelTaskKey, ModelTaskConfig> = {
   gap_analysis: {
     task: "gap_analysis",
     label: "Gap Analysis",
+    defaultProvider: "openai_compatible"
+  },
+  jd_analysis: {
+    task: "jd_analysis",
+    label: "JD Analysis",
     defaultProvider: "openai_compatible"
   },
   rewrite: {

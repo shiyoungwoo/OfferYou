@@ -7,7 +7,7 @@ export type FactGroundingInput = {
   beforeText: string;
   afterText: string;
   reasonText?: string;
-  jdText: string;
+  jdText?: string;
   company?: string;
   jobTitle?: string;
   masterFacts?: FactGroundingEvidence[];
@@ -75,9 +75,6 @@ function buildCorpus(input: FactGroundingInput) {
   const pieces = [
     input.beforeText,
     input.reasonText ?? "",
-    input.jdText,
-    input.company ?? "",
-    input.jobTitle ?? "",
     input.resumeText ?? "",
     ...(input.masterFacts ?? []).flatMap((fact) => [fact.text, fact.title ?? ""])
   ];

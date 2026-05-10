@@ -6,6 +6,17 @@ import type { PersistedWorkspaceDraft } from "@/lib/services/analysis/workspace-
 
 export type GenerationMode = "model" | "model_repaired" | "deterministic_fallback";
 
+export type JobApplyRunMode = "manual_editor" | "job_tailoring" | "talent_driven_agent";
+
+export type JobApplyNextAction =
+  | "confirm_resume_calibration"
+  | "review_suggestions"
+  | "sync_snapshot"
+  | "export_pdf"
+  | "prepare_interview"
+  | "check_model_config"
+  | "done";
+
 export type JobApplyRunStage =
   | "input_received"
   | "resume_calibrated"
@@ -44,6 +55,10 @@ export type JDInsight = {
   coreAbilities: string[];
   bonusItems: string[];
   avoidItems: string[];
+  sourceKeywords?: string[];
+  generationMode?: GenerationMode;
+  modelProvider?: ModelProviderKey;
+  fallbackReason?: string;
 };
 
 export type RewriteStrategy = {
@@ -65,6 +80,7 @@ export type JobApplyRun = {
   draftId: string;
   company?: string;
   jobTitle?: string;
+  runMode: JobApplyRunMode;
   stage: JobApplyRunStage;
   steps: Array<AgentStepResult<unknown>>;
   calibratedResume?: CalibratedResumeProfile;
@@ -72,6 +88,9 @@ export type JobApplyRun = {
   rewriteStrategy?: RewriteStrategy;
   suggestions?: PersistedWorkspaceDraft["suggestions"];
   finalResumeDraft?: ResumeDocument;
+  nextAction?: JobApplyNextAction;
+  blockingReason?: string;
+  needsHumanConfirmation?: boolean;
   createdAt: string;
   updatedAt: string;
 };

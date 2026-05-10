@@ -5,7 +5,15 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"]
+    setupFiles: ["tests/setup-global.ts"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
+    deps: {
+      optimizer: {
+        web: {
+          include: ["node:fs", "node:path", "node:crypto"]
+        }
+      }
+    }
   },
   resolve: {
     alias: {

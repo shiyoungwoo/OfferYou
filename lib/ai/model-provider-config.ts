@@ -1,4 +1,5 @@
 import type { ModelTaskKey } from "@/lib/ai/model-task-config";
+import { hasResolvedOpenAICompatibleConfig, resolveOpenAICompatibleModelConfig } from "@/lib/ai/model-routing";
 
 export type ModelProviderKey = "gemini" | "openai_compatible" | "deterministic_fallback";
 
@@ -15,20 +16,21 @@ export type ModelProviderCapability = {
 export type ModelProviderInfo = {
   key: ModelProviderKey;
   label: string;
+  configured: boolean;
+  authenticated: boolean;
+  callable: boolean;
   available: boolean;
   default: boolean;
 };
+
+export type ModelProviderAvailability = Pick<ModelProviderInfo, "configured" | "authenticated" | "callable">;
 
 export function hasGeminiApiKey() {
   return Boolean(process.env.GEMINI_API_KEY);
 }
 
 export function hasOpenAICompatibleConfig() {
-  return Boolean(
-    (process.env.OPENAI_API_KEY || process.env.MIMO_API_KEY) &&
-      (process.env.OPENAI_BASE_URL || process.env.MIMO_BASE_URL) &&
-      (process.env.OPENAI_MODEL || process.env.MIMO_MODEL)
-  );
+  return hasResolvedOpenAICompatibleConfig();
 }
 
 export function getDefaultModelProvider(_task?: ModelTaskKey): ModelProviderKey {
@@ -46,43 +48,74 @@ export function getDefaultModelProvider(_task?: ModelTaskKey): ModelProviderKey 
 }
 
 export function getAvailableModelProviders(): ModelProviderInfo[] {
-  const geminiAvailable = hasGeminiApiKey();
-  const openAICompatibleAvailable = hasOpenAICompatibleConfig();
+  const geminiAvailability = getModelProviderAvailability("gemini");
+  const openAICompatibleAvailability = getModelProviderAvailability("openai_compatible");
   const defaultProvider = getDefaultModelProvider();
 
   return [
     {
       key: "gemini",
       label: "Gemini",
-      available: geminiAvailable,
+      configured: geminiAvailability.configured,
+      authenticated: geminiAvailability.authenticated,
+      callable: geminiAvailability.callable,
+      available: geminiAvailability.callable,
       default: defaultProvider === "gemini"
     },
     {
       key: "openai_compatible",
       label: getOpenAICompatibleProviderLabel(),
-      available: openAICompatibleAvailable,
+      configured: openAICompatibleAvailability.configured,
+      authenticated: openAICompatibleAvailability.authenticated,
+      callable: openAICompatibleAvailability.callable,
+      available: openAICompatibleAvailability.callable,
       default: defaultProvider === "openai_compatible"
     },
     {
       key: "deterministic_fallback",
       label: "Deterministic Fallback",
+      configured: false,
+      authenticated: false,
+      callable: true,
       available: true,
       default: defaultProvider === "deterministic_fallback"
     }
   ];
 }
 
+export function getModelProviderAvailability(provider: Exclude<ModelProviderKey, "deterministic_fallback">): ModelProviderAvailability {
+  if (provider === "gemini") {
+    const configured = hasGeminiApiKey();
+    return {
+      configured,
+      authenticated: configured,
+      callable: configured
+    };
+  }
+
+  const configured = hasOpenAICompatibleConfig();
+  return {
+    configured,
+    authenticated: configured,
+    callable: configured
+  };
+}
+
 export function getModelProviderCapability(provider: ModelProviderKey): ModelProviderCapability {
   if (provider === "openai_compatible") {
-    const isMimo = getOpenAICompatibleProviderLabel().includes("小米");
+    const providerLabel = getOpenAICompatibleProviderLabel();
+    const isMimo = providerLabel.includes("小米");
+    const isOpenAICodex = providerLabel.includes("OpenAI Codex");
     return {
       level: isMimo ? "vision_optional" : "text_only",
-      title: isMimo ? "小米 MiMo" : "文本模型",
+      title: providerLabel,
       description: isMimo
-        ? "当前按 OpenAI 兼容接口调用小米 MiMo，优先用于 JD 匹配、中文改写和结构化输出；视觉校准需要后续接入图片消息。"
-        : "适合 JD 匹配、中文改写和结构化输出。遇到截图、图片或复杂 PDF 时，需要先完成解析和结构校准。",
+        ? "当前按 OpenAI 兼容接口调用小米 MiMo：复杂推理默认使用 v2.5-pro，普通文本节点默认使用 v2.5；截图 JD 需要显式进入视觉识别链路。"
+        : isOpenAICodex
+          ? "OpenAI Codex OAuth 模式用于高质量推理与轻量节点分流；需要有效 OAuth 访问令牌，不能使用普通页面登录态代替服务端调用。"
+          : "适合 JD 匹配、中文改写和结构化输出。遇到截图、图片或复杂 PDF 时，需要先完成解析和结构校准。",
       bestFor: ["岗位匹配", "简历改写", "面试准备"],
-      limitations: isMimo ? ["当前链路先接文本改写", "图片/截图校准接口待接入"] : ["不能直接读取截图", "不能直接校准页面视觉结构"]
+      limitations: isMimo ? ["v2.5-pro 不作为图片识别模型使用", "截图 JD 识别必须记录用户确认"] : ["不能直接读取截图", "不能直接校准页面视觉结构"]
     };
   }
 
@@ -106,9 +139,14 @@ export function getModelProviderCapability(provider: ModelProviderKey): ModelPro
 }
 
 function getOpenAICompatibleProviderLabel() {
-  const model = process.env.OPENAI_MODEL ?? process.env.MIMO_MODEL ?? "";
-  const baseUrl = process.env.OPENAI_BASE_URL ?? process.env.MIMO_BASE_URL ?? "";
-  if (/mimo|xiaomi/i.test(`${model} ${baseUrl}`)) {
+  const config = resolveOpenAICompatibleModelConfig();
+  const model = config?.model ?? process.env.OPENAI_MODEL ?? process.env.MIMO_MODEL ?? "";
+  const baseUrl = config?.baseUrl ?? process.env.OPENAI_BASE_URL ?? process.env.MIMO_BASE_URL ?? "";
+  if (config?.flavor === "openai_codex" || process.env.OPENAI_COMPATIBLE_FLAVOR === "openai_codex") {
+    return "OpenAI Codex OAuth";
+  }
+
+  if (config?.flavor === "mimo" || /mimo|xiaomi/i.test(`${model} ${baseUrl}`)) {
     return "小米 MiMo";
   }
 

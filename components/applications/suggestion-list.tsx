@@ -228,6 +228,7 @@ function SuggestionTBlocks({
         actionReasonText={suggestion.editedReasonText}
         confirmOnly={isEducation}
         currentStatus={suggestion.status}
+        verificationStatus={suggestion.verification?.status}
         draftId={draftId}
         isDecided={suggestion.status !== "pending"}
         jdCapability={getJdCapabilityLabel(suggestion)}
@@ -260,6 +261,7 @@ function SuggestionTBlocks({
             actionAfterText={revisedEntry.body || `${revisedEntry.title} ${revisedEntry.date}`.trim()}
             actionReasonText={index === 0 ? suggestion.editedReasonText : ""}
             currentStatus={decisions[index] ?? "pending"}
+            verificationStatus={suggestion.verification?.status}
             draftId={draftId}
             isDecided={Boolean(decisions[index])}
             jdCapability={getJdCapabilityLabel(suggestion)}
@@ -322,16 +324,17 @@ function SuggestionTBlocks({
   );
 }
 
-function TSection({ 
-  title, 
-  original, 
-  revised, 
+function TSection({
+  title,
+  original,
+  revised,
   reason,
   originalLabel = "原始简历内容",
   originalHelper,
   draftId,
   suggestionId,
   currentStatus,
+  verificationStatus,
   onActionComplete,
   onEdit,
   onRevise,
@@ -343,16 +346,17 @@ function TSection({
   jdCapability,
   localOnly = false,
   confirmOnly = false
-}: { 
-  title: string; 
-  original: string; 
-  revised: string; 
+}: {
+  title: string;
+  original: string;
+  revised: string;
   reason: string;
   originalLabel?: string;
   originalHelper?: string;
   draftId: string;
   suggestionId: string;
   currentStatus: string;
+  verificationStatus?: "pass" | "warn" | "fail";
   onActionComplete: () => Promise<void>;
   onEdit: () => void;
   onRevise: () => void;
@@ -451,6 +455,7 @@ function TSection({
                     compact
                     confirmOnly={confirmOnly}
                     currentStatus={localStatus}
+                    verificationStatus={verificationStatus}
                     draftId={draftId}
                     localOnly={localOnly}
                     onAccept={() => {
@@ -495,13 +500,13 @@ function findNextPendingGroupKey(groups: SuggestionGroup[], currentGroupIndex: n
 }
 
 function groupSuggestions(suggestions: EditableSuggestion[]): SuggestionGroup[] {
-  const order = ["summary", "work", "project", "education", "supplement", "other"];
+  const order = ["summary", "work", "project", "education", "credential", "other"];
   const labels: Record<string, { title: string }> = {
     summary: { title: "个人优势" },
     work: { title: "工作经历" },
     project: { title: "项目经历" },
     education: { title: "教育背景" },
-    supplement: { title: "补充信息" },
+    credential: { title: "证书与技能（不进入简历独立模块）" },
     other: { title: "其他经历" }
   };
   const buckets = new Map<string, EditableSuggestion[]>();
@@ -526,7 +531,7 @@ function normalizeSectionKey(section: string) {
   if (["experience", "work"].includes(normalized)) return "work";
   if (normalized.includes("project")) return "project";
   if (normalized.includes("education")) return "education";
-  if (["skill", "certificate", "supplement"].includes(normalized)) return "supplement";
+  if (["skill", "certificate", "supplement", "credential"].includes(normalized)) return "credential";
   return "other";
 }
 

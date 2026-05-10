@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { parseLooseJSON } from "@/lib/ai/json-parser";
 
 let _genAI: GoogleGenerativeAI | null = null;
 
@@ -39,34 +40,6 @@ export async function callGemini(options: GeminiCallOptions): Promise<string> {
 
   const result = await model.generateContent(userPrompt);
   return result.response.text();
-}
-
-function stripMarkdown(text: string) {
-  return text.replace(/^```(?:json)?\s*/u, "").replace(/```\s*$/u, "").trim();
-}
-
-function parseLooseJSON<T>(text: string): T {
-  const stripped = stripMarkdown(text);
-
-  try {
-    return JSON.parse(stripped) as T;
-  } catch {
-    const objectStart = stripped.indexOf("{");
-    const objectEnd = stripped.lastIndexOf("}");
-
-    if (objectStart !== -1 && objectEnd > objectStart) {
-      return JSON.parse(stripped.slice(objectStart, objectEnd + 1)) as T;
-    }
-
-    const arrayStart = stripped.indexOf("[");
-    const arrayEnd = stripped.lastIndexOf("]");
-
-    if (arrayStart !== -1 && arrayEnd > arrayStart) {
-      return JSON.parse(stripped.slice(arrayStart, arrayEnd + 1)) as T;
-    }
-
-    throw new SyntaxError("Gemini response did not contain a JSON object or array.");
-  }
 }
 
 /**

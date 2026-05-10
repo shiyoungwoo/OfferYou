@@ -1,7 +1,68 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/ai/model-gateway", () => ({
+  callModelJSON: vi.fn(async (options: { task?: string; userPrompt?: string }) => {
+    if (options.task === "resume_calibration") {
+      return {
+        provider: "deterministic_fallback",
+        generationMode: "deterministic_fallback",
+        data: null,
+        fallbackReason: "测试中不调用结构校准模型。"
+      };
+    }
+
+    if (options.task === "jd_analysis") {
+      return {
+        provider: "openai_compatible",
+        generationMode: "model",
+        data: {
+          company: "测试公司",
+          jobTitle: "AI 产品经理",
+          hardRequirements: ["AI 产品经理", "产品运营", "数据分析", "AI 内容"],
+          coreAbilities: ["工作流", "跨团队", "复盘", "流程", "模板"],
+          bonusItems: ["AI 产品实践"],
+          avoidItems: ["必须基于真实事实"],
+          sourceKeywords: ["AI 产品经理", "产品运营", "数据分析", "AI 内容", "工作流", "跨团队", "复盘", "流程", "模板"]
+        }
+      };
+    }
+
+    if (options.userPrompt?.includes('"suggestions"')) {
+      return {
+        provider: "openai_compatible",
+        generationMode: "model",
+        data: {
+          suggestions: [
+            {
+              section: "project",
+              title: "岗位定制改写",
+              before: "原始经历",
+              after: "AI 产品经理 / 产品运营 / AI 内容方向：围绕工作流、跨团队协作、数据分析、复盘、流程沉淀和模板化输出完成岗位定制表达。",
+              reason: "对应 JD 中 AI 产品经理、产品运营、数据分析、AI 内容、工作流、跨团队、复盘、流程和模板要求，且必须基于真实事实。",
+              jdAbility: "工作流",
+              factAnchors: ["原始经历"]
+            }
+          ]
+        }
+      };
+    }
+
+    return {
+      provider: "openai_compatible",
+      generationMode: "model",
+      data: {
+        fitScore: 82,
+        strengths: ["具备 AI 产品经理、产品运营、数据分析、AI 内容、工作流和跨团队相关信号。"],
+        gaps: ["仍需补充可量化结果和真实事实证据。"],
+        keywordsToBridge: ["AI 产品经理", "产品运营", "数据分析", "AI 内容", "工作流", "跨团队", "复盘", "流程", "模板"],
+        riskNotes: ["每条改写仍需真实事实支撑。"]
+      }
+    };
+  })
+}));
 import { createMasterFact } from "@/lib/services/master/master-service";
 import { createDraft } from "@/lib/services/ingestion/create-draft";
 import { generateSnapshotForDraft, readSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
@@ -83,7 +144,7 @@ describe("job-apply quality fixtures", () => {
       );
       expect(qualityScores.some((score) => score.passed)).toBe(true);
       expect(draft.analysis.riskNotes.length).toBeGreaterThan(0);
-      expect(draft.analysis.riskNotes.join(" ")).toContain("模型降级原因");
+      expect(draft.analysis.riskNotes.join(" ")).not.toContain("模型降级原因");
       expect(draft.suggestions.some((suggestion) => sample.expectedKeywords.some((keyword) => JSON.stringify(suggestion).includes(keyword)))).toBe(true);
 
       await generateSnapshotForDraft(draft.id);

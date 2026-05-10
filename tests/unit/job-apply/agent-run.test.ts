@@ -38,6 +38,7 @@ describe("job apply run service", () => {
       "suggestions_ready",
       "user_reviewing"
     ]);
+    expect(run.runMode).toBe("job_tailoring");
     expect(run.jdInsight?.coreAbilities).toContain("AI 工具 / Prompt 应用");
   });
 
@@ -64,6 +65,171 @@ describe("job apply run service", () => {
 
     expect(run.stage).toBe("snapshot_ready");
     expect(run.steps.some((step) => step.stage === "snapshot_ready")).toBe(true);
+  });
+
+  it("returns nextAction confirm_resume_calibration when at input_received stage", () => {
+    const draft = baseDraft({
+      analysis: undefined,
+      jdInsight: undefined,
+      rewriteStrategy: undefined,
+      suggestions: []
+    });
+    draft.calibratedResume = undefined;
+    const run = buildJobApplyRunFromDraft(draft);
+
+    expect(run.stage).toBe("input_received");
+    expect(run.runMode).toBe("manual_editor");
+    expect(run.nextAction).toBe("confirm_resume_calibration");
+    expect(run.needsHumanConfirmation).toBe(true);
+  });
+
+  it("marks the run as talent_driven_agent when talent context exists", () => {
+    const run = buildJobApplyRunFromDraft(
+      baseDraft({
+        talentProfileUsed: {
+          id: "talent-1",
+          headline: "擅长 AI 产品与数据分析",
+          confidenceNote: "高置信"
+        },
+        suggestions: [
+          {
+            id: "s-1",
+            section: "summary",
+            title: "个人优势",
+            beforeText: "原文",
+            afterText: "改写",
+            reasonText: "理由",
+            status: "pending",
+            sourceKind: "resume_baseline",
+            sourceLabel: "简历",
+            generationMode: "model_repaired",
+            modelProvider: "openai_compatible",
+            revisionRound: 0
+          }
+        ]
+      })
+    );
+
+    expect(run.runMode).toBe("talent_driven_agent");
+  });
+
+  it("returns nextAction review_suggestions when there are pending suggestions", () => {
+    const run = buildJobApplyRunFromDraft(baseDraft({
+      suggestions: [
+        {
+          id: "s-1",
+          section: "summary",
+          title: "个人优势",
+          beforeText: "原文",
+          afterText: "改写",
+          reasonText: "理由",
+          status: "pending",
+          sourceKind: "resume_baseline",
+          sourceLabel: "简历",
+          generationMode: "model",
+          revisionRound: 0
+        }
+      ]
+    }));
+
+    expect(run.nextAction).toBe("review_suggestions");
+    expect(run.needsHumanConfirmation).toBe(true);
+  });
+
+  it("returns nextAction review_suggestions with blocking reason when fail verification exists", () => {
+    const run = buildJobApplyRunFromDraft(baseDraft({
+      suggestions: [
+        {
+          id: "s-1",
+          section: "summary",
+          title: "个人优势",
+          beforeText: "原文",
+          afterText: "改写",
+          reasonText: "理由",
+          status: "pending",
+          sourceKind: "resume_baseline",
+          sourceLabel: "简历",
+          generationMode: "model",
+          verification: { status: "fail", issues: ["事实缺少依据"] },
+          revisionRound: 0
+        }
+      ]
+    }));
+
+    expect(run.nextAction).toBe("review_suggestions");
+    expect(run.blockingReason).toContain("未通过事实校验");
+  });
+
+  it("returns nextAction check_model_config when all pending suggestions are deterministic fallback", () => {
+    const run = buildJobApplyRunFromDraft(baseDraft({
+      suggestions: [
+        {
+          id: "s-1",
+          section: "summary",
+          title: "个人优势",
+          beforeText: "原文",
+          afterText: "规则整理",
+          reasonText: "理由",
+          status: "pending",
+          sourceKind: "resume_baseline",
+          sourceLabel: "简历",
+          generationMode: "deterministic_fallback",
+          modelProvider: "deterministic_fallback",
+          revisionRound: 0
+        }
+      ]
+    }));
+
+    expect(run.nextAction).toBe("check_model_config");
+    expect(run.needsHumanConfirmation).toBe(true);
+    expect(run.blockingReason).toContain("不是 AI 改写");
+  });
+
+  it("keeps model-generated pending suggestions reviewable", () => {
+    const run = buildJobApplyRunFromDraft(baseDraft({
+      suggestions: [
+        {
+          id: "s-1",
+          section: "summary",
+          title: "个人优势",
+          beforeText: "原文",
+          afterText: "模型改写",
+          reasonText: "理由",
+          status: "pending",
+          sourceKind: "resume_baseline",
+          sourceLabel: "简历",
+          generationMode: "model_repaired",
+          modelProvider: "openai_compatible",
+          revisionRound: 0
+        }
+      ]
+    }));
+
+    expect(run.nextAction).toBe("review_suggestions");
+    expect(run.needsHumanConfirmation).toBe(true);
+  });
+
+  it("returns nextAction sync_snapshot when suggestions are accepted but no final draft", () => {
+    const run = buildJobApplyRunFromDraft(baseDraft({
+      suggestions: [
+        {
+          id: "s-1",
+          section: "summary",
+          title: "个人优势",
+          beforeText: "原文",
+          afterText: "改写",
+          reasonText: "理由",
+          status: "accepted",
+          sourceKind: "resume_baseline",
+          sourceLabel: "简历",
+          generationMode: "deterministic_fallback",
+          modelProvider: "deterministic_fallback",
+          revisionRound: 0
+        }
+      ]
+    }));
+
+    expect(run.nextAction).toBe("sync_snapshot");
   });
 
   it("keeps fallback and verifier issues visible inside run risk notes", () => {

@@ -20,6 +20,12 @@ vi.mock("@/lib/services/export/pdf-export-service", () => ({
   renderPdfFromHtml: vi.fn()
 }));
 
+vi.mock("@/lib/ai/model-gateway", () => ({
+  callModelJSON: vi.fn(),
+  callModelText: vi.fn(),
+  getAvailableModelProviders: vi.fn(() => [])
+}));
+
 let tempDir: string;
 let previousCwd: string;
 
@@ -165,6 +171,54 @@ describe("interview-prep-service", () => {
     expect(reloaded?.questions[0]?.favorite).toBe(true);
     expect(reloaded?.questions[0]?.answerDraft).toContain("事实");
     expect(reloaded?.selfIntroDraft).toContain("真实经历");
+  });
+
+  it("generates interview prep with model output when available", async () => {
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+    vi.mocked(callModelJSON).mockResolvedValueOnce({
+      provider: "openai_compatible",
+      data: {
+        selfIntroDraft: "我是模型生成的自我介绍，针对 OfferYou 的 AI Product Manager 岗位。",
+        questions: [
+          { questionText: "模型问题 1：请介绍你的 AI 工具经验。", sourceType: "jd", answerDraft: "" },
+          { questionText: "模型问题 2：如何拆解复杂需求？", sourceType: "jd", answerDraft: "" },
+          { questionText: "模型问题 3：描述一个项目经历。", sourceType: "snapshot", answerDraft: "" },
+          { questionText: "模型问题 4：如何处理模糊需求？", sourceType: "inferred", answerDraft: "" },
+          { questionText: "模型问题 5：三个月内如何交付结果？", sourceType: "jd", answerDraft: "" }
+        ]
+      },
+      generationMode: "model"
+    });
+
+    const record = await createApplicationRecord({
+      draftId: "draft-1",
+      exportStoragePath: "/tmp/export.pdf"
+    });
+
+    const prep = await createInterviewPrepFromRecord(record.id);
+
+    expect(prep.selfIntroDraft).toContain("模型生成的自我介绍");
+    expect(prep.questions.length).toBeGreaterThanOrEqual(5);
+    expect(prep.generationMode).toBe("model");
+    expect(prep.modelProvider).toBe("openai_compatible");
+    expect(prep.riskNotes).toBeUndefined();
+  });
+
+  it("falls back to deterministic interview prep with readable risk note when model fails", async () => {
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+    vi.mocked(callModelJSON).mockRejectedValueOnce(new Error("Model timeout"));
+
+    const record = await createApplicationRecord({
+      draftId: "draft-1",
+      exportStoragePath: "/tmp/export.pdf"
+    });
+
+    const prep = await createInterviewPrepFromRecord(record.id);
+
+    expect(prep.questions.length).toBeGreaterThanOrEqual(5);
+    expect(prep.generationMode).toBe("deterministic_fallback");
+    expect(prep.riskNotes).toBeDefined();
+    expect(prep.riskNotes!.join(" ")).toContain("模型暂不可用");
   });
 
   it("returns null for corrupted interview prep payloads", async () => {

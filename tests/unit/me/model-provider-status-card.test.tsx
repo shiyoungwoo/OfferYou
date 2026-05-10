@@ -12,18 +12,27 @@ describe("me status cards", () => {
           {
             key: "gemini",
             label: "Gemini",
+            configured: true,
+            authenticated: true,
+            callable: true,
             available: true,
             default: true
           },
           {
             key: "openai_compatible",
             label: "OpenAI 兼容模式",
+            configured: false,
+            authenticated: false,
+            callable: false,
             available: false,
             default: false
           },
           {
             key: "deterministic_fallback",
             label: "Deterministic Fallback",
+            configured: false,
+            authenticated: false,
+            callable: true,
             available: true,
             default: false
           }
@@ -33,12 +42,12 @@ describe("me status cards", () => {
 
     expect(screen.getByText("模型状态")).toBeTruthy();
     expect(screen.getByText("Gemini")).toBeTruthy();
-    expect(screen.getByText("OpenAI 兼容模式")).toBeTruthy();
+    expect(screen.getAllByText("OpenAI 兼容模式").length).toBeGreaterThan(0);
     expect(screen.getByText("Deterministic Fallback")).toBeTruthy();
     expect(screen.getAllByText("可用").length).toBeGreaterThan(0);
     expect(screen.getByText("未配置")).toBeTruthy();
-    expect(screen.getByText("文本模型")).toBeTruthy();
     expect(screen.getByText("多模态模型")).toBeTruthy();
+    expect(screen.getByText(/岗位匹配、简历改写、面试准备/)).toBeTruthy();
     expect(screen.getByText("确定性兜底")).toBeTruthy();
     expect(screen.queryByText(/GEMINI_API_KEY|OPENAI_API_KEY|OPENAI_BASE_URL|OPENAI_MODEL/)).toBeNull();
   });

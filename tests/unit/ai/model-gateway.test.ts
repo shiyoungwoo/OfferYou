@@ -30,22 +30,55 @@ describe("model gateway", () => {
       {
         key: "gemini",
         label: "Gemini",
+        configured: false,
+        authenticated: false,
+        callable: false,
         available: false,
         default: false
       },
       {
         key: "openai_compatible",
         label: "OpenAI 兼容模式",
+        configured: false,
+        authenticated: false,
+        callable: false,
         available: false,
         default: false
       },
       {
         key: "deterministic_fallback",
         label: "Deterministic Fallback",
+        configured: false,
+        authenticated: false,
+        callable: true,
         available: true,
         default: true
       }
     ]);
+  });
+
+  it("returns human-readable runtime status for unavailable providers", async () => {
+    const { getModelProviderRuntimeStatus } = await import("@/lib/ai/model-gateway");
+
+    const geminiStatus = getModelProviderRuntimeStatus("gemini");
+    const mimoStatus = getModelProviderRuntimeStatus("openai_compatible");
+
+    expect(geminiStatus).toMatchObject({
+      provider: "gemini",
+      configured: false,
+      authenticated: false,
+      callable: false,
+      default: false
+    });
+    expect(geminiStatus.fallbackReason).toContain("GEMINI_API_KEY");
+    expect(mimoStatus).toMatchObject({
+      provider: "openai_compatible",
+      configured: false,
+      authenticated: false,
+      callable: false,
+      default: false
+    });
+    expect(mimoStatus.fallbackReason).toContain("小米 MiMo / OpenAI 兼容配置");
   });
 
   it("returns deterministic fallback data when requested", async () => {
@@ -81,7 +114,13 @@ describe("model gateway", () => {
 
     const { callModelJSON, callModelText, getAvailableModelProviders } = await import("@/lib/ai/model-gateway");
 
-    expect(getAvailableModelProviders()[0]?.available).toBe(true);
+    expect(getAvailableModelProviders()[0]).toMatchObject({
+      key: "gemini",
+      configured: true,
+      authenticated: true,
+      callable: true,
+      available: true
+    });
 
     const jsonResult = await callModelJSON({
       systemPrompt: "system",
@@ -98,6 +137,21 @@ describe("model gateway", () => {
     expect(jsonResult.data).toEqual({ hello: "world" });
     expect(textResult.provider).toBe("gemini");
     expect(textResult.data).toBe("plain text");
+  });
+
+  it("marks the OpenAI compatible provider as callable when configured", async () => {
+    process.env.OPENAI_API_KEY = "openai-key";
+    process.env.OPENAI_BASE_URL = "https://example.com/v1";
+    process.env.OPENAI_MODEL = "mimo-v2.5-pro";
+
+    const { getModelProviderRuntimeStatus } = await import("@/lib/ai/model-gateway");
+
+    expect(getModelProviderRuntimeStatus("openai_compatible")).toMatchObject({
+      provider: "openai_compatible",
+      configured: true,
+      authenticated: true,
+      callable: true
+    });
   });
 
   it("uses OpenAI compatible provider when configured", async () => {
@@ -135,7 +189,7 @@ describe("model gateway", () => {
 
     const { callModelJSON, callModelText, getAvailableModelProviders } = await import("@/lib/ai/model-gateway");
 
-    expect(getAvailableModelProviders().some((provider) => provider.key === "openai_compatible" && provider.available)).toBe(true);
+    expect(getAvailableModelProviders().some((provider) => provider.key === "openai_compatible" && provider.callable)).toBe(true);
 
     const jsonResult = await callModelJSON({
       systemPrompt: "system",

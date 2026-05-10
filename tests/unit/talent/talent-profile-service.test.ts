@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeSql } from "@/lib/db";
 import { buildCareerNavigation } from "@/lib/services/talent/career-navigation";
 import {
@@ -10,6 +10,19 @@ import {
   getLatestConfirmedCareerNavigationForTalentProfile,
   getLatestConfirmedTalentProfile
 } from "@/lib/services/talent/talent-profile-service";
+import { listMasterInsights } from "@/lib/services/master/master-service";
+
+vi.mock("@/lib/ai/model-gateway", () => ({
+  callModelJSON: vi.fn()
+}));
+
+vi.mock("@/lib/services/master/master-service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/services/master/master-service")>();
+  return {
+    ...actual,
+    saveMasterInsight: vi.fn(actual.saveMasterInsight)
+  };
+});
 
 let tempDir: string;
 let previousCwd: string;
@@ -103,5 +116,97 @@ describe("talent-profile-service", () => {
     const latest = await getLatestConfirmedCareerNavigationForTalentProfile("default-user", "talent-profile-1");
 
     expect(latest).toBeNull();
+  });
+
+  it("uses model output when available and saves high-confidence insights", async () => {
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+    const { saveMasterInsight } = await import("@/lib/services/master/master-service");
+    vi.mocked(saveMasterInsight).mockImplementation(await vi.importActual<typeof import("@/lib/services/master/master-service")>("@/lib/services/master/master-service").then((actual) => actual.saveMasterInsight));
+    vi.mocked(callModelJSON).mockResolvedValueOnce({
+      provider: "openai_compatible",
+      data: {
+        headline: "你最容易发光的状态，是作为「结构化梳理者」。",
+        summary: "模型生成的天赋画像。",
+        signals: [
+          { key: "clarity_builder", label: "结构化梳理者", description: "能把混乱信息理清。", evidence: ["梳理了复杂流程", "整理了需求文档"] },
+          { key: "ownership_runner", label: "主动推进者", description: "不会等条件完美才行动。", evidence: ["主动发起项目", "推动团队对齐"] }
+        ],
+        workStyle: ["需要自主空间"],
+        suitableDirections: ["运营、项目推进类方向"],
+        cautionNotes: ["继续保持验证"],
+        confidenceNote: "当前可信度为中等。"
+      },
+      generationMode: "model"
+    });
+
+    const record = await confirmTalentProfile({
+      userId: "default-user",
+      answers: {
+        proudMoment: "I led a messy workflow recovery and clarified the next steps."
+      }
+    });
+
+    expect(record.generationMode).toBe("model");
+    expect(record.modelProvider).toBe("openai_compatible");
+    expect(record.profile.headline).toContain("结构化梳理者");
+    expect(record.riskNotes).toBeUndefined();
+
+    const insights = await listMasterInsights("default-user");
+    expect(insights.length).toBeGreaterThanOrEqual(1);
+    expect(insights.some((i) => i.title === "结构化梳理者")).toBe(true);
+  });
+
+  it("keeps a visible risk note when saving talent insights fails", async () => {
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+    const { saveMasterInsight } = await import("@/lib/services/master/master-service");
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    vi.mocked(saveMasterInsight).mockRejectedValueOnce(new Error("database locked"));
+    vi.mocked(callModelJSON).mockResolvedValueOnce({
+      provider: "openai_compatible",
+      data: {
+        headline: "你最容易发光的状态，是作为「结构化梳理者」。",
+        summary: "模型生成的天赋画像。",
+        signals: [
+          { key: "clarity_builder", label: "结构化梳理者", description: "能把混乱信息理清。", evidence: ["梳理了复杂流程", "整理了需求文档"] }
+        ],
+        workStyle: ["需要自主空间"],
+        suitableDirections: ["运营、项目推进类方向"],
+        cautionNotes: [],
+        confidenceNote: "当前可信度为中等。"
+      },
+      generationMode: "model"
+    });
+
+    const record = await confirmTalentProfile({
+      userId: "default-user",
+      answers: {
+        proudMoment: "I led a messy workflow recovery and clarified the next steps."
+      }
+    });
+
+    expect(record.riskNotes?.join(" ")).toContain("天赋洞察未能写入事实主档");
+    expect(consoleWarn).toHaveBeenCalled();
+
+    consoleWarn.mockRestore();
+  });
+
+  it("falls back to deterministic profile with risk note when model fails", async () => {
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+    vi.mocked(callModelJSON).mockRejectedValueOnce(new Error("Model timeout"));
+
+    const record = await confirmTalentProfile({
+      userId: "default-user",
+      answers: {
+        proudMoment: "I led a messy client onboarding, clarified the workflow, and organized the team around a plan the customer trusted.",
+        trustedProblem: "People rely on me when cross-team work is confusing because I can listen, coordinate, and turn ambiguity into clear next steps.",
+        energyPattern: "I gain energy from solving complex problems with people and owning the path forward."
+      }
+    });
+
+    expect(record.generationMode).toBe("deterministic_fallback");
+    expect(record.riskNotes).toBeDefined();
+    expect(record.riskNotes!.join(" ")).toContain("模型暂不可用");
+    expect(record.profile.signals.length).toBeGreaterThan(0);
   });
 });

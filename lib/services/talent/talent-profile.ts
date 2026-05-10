@@ -1,3 +1,5 @@
+import { callModelJSON } from "@/lib/ai/model-gateway";
+
 export type TalentPromptAnswers = {
   discoveryMode?: "radar" | "deep";
   proudMoment?: string;
@@ -28,6 +30,13 @@ export type TalentProfile = {
   suitableDirections: string[];
   cautionNotes: string[];
   confidenceNote: string;
+};
+
+export type TalentProfileGenerationResult = {
+  profile: TalentProfile;
+  generationMode: "model" | "model_repaired" | "deterministic_fallback";
+  riskNotes?: string[];
+  modelProvider?: string;
 };
 
 const signalCatalog = [
@@ -369,6 +378,74 @@ export function buildTalentProfile(answers: TalentPromptAnswers): TalentProfile 
     suitableDirections,
     cautionNotes,
     confidenceNote
+  };
+}
+
+type ModelTalentProfileOutput = {
+  headline: string;
+  summary: string;
+  signals: Array<{
+    key: string;
+    label: string;
+    description: string;
+    evidence: string[];
+  }>;
+  workStyle: string[];
+  suitableDirections: string[];
+  cautionNotes: string[];
+  confidenceNote: string;
+};
+
+export async function buildTalentProfileWithModel(answers: TalentPromptAnswers): Promise<TalentProfileGenerationResult> {
+  const answerEntries = listAnswerEntries(answers);
+
+  const systemPrompt = [
+    "你是一位资深职业教练。根据候选人的真实回答，生成天赋优势画像。",
+    "",
+    "规则：",
+    "- 只能基于候选人提供的回答内容，不编造经历或成就。",
+    "- 识别 3 到 5 条个人优势信号，每条需有证据。",
+    "- 每条信号用一个英文 key 标识（如 clarity_builder、ownership_runner）。",
+    "- 输出合法 JSON，不要 Markdown。"
+  ].join("\n");
+
+  const userPrompt = [
+    "候选人回答：",
+    ...answerEntries.map((entry, i) => `${i + 1}. ${entry}`),
+    "",
+    `请输出 JSON：{ "headline": string, "summary": string, "signals": Array<{ "key": string, "label": string, "description": string, "evidence": string[] }>, "workStyle": string[], "suitableDirections": string[], "cautionNotes": string[], "confidenceNote": string }`
+  ].join("\n");
+
+  const result = await callModelJSON<ModelTalentProfileOutput>({
+    systemPrompt,
+    userPrompt,
+    task: "talent"
+  });
+
+  if (!result.data?.headline || !result.data.signals?.length) {
+    throw new Error("Model returned empty talent profile.");
+  }
+
+  const profile: TalentProfile = {
+    headline: result.data.headline,
+    summary: result.data.summary ?? "",
+    signals: result.data.signals.slice(0, 5).map((s) => ({
+      key: s.key,
+      label: s.label,
+      description: s.description ?? "",
+      evidence: (s.evidence ?? []).map(excerpt)
+    })),
+    workStyle: result.data.workStyle ?? [],
+    suitableDirections: result.data.suitableDirections ?? [],
+    cautionNotes: result.data.cautionNotes ?? [],
+    confidenceNote: result.data.confidenceNote ?? ""
+  };
+
+  return {
+    profile,
+    generationMode: result.generationMode as TalentProfileGenerationResult["generationMode"],
+    riskNotes: result.fallbackReason ? [result.fallbackReason] : undefined,
+    modelProvider: result.provider
   };
 }
 

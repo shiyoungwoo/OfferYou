@@ -84,10 +84,11 @@ describe("openai compatible client", () => {
     );
 
     expect(hasOpenAICompatibleConfig()).toBe(true);
-    expect(getOpenAICompatibleConfig()).toEqual({
+    expect(getOpenAICompatibleConfig()).toMatchObject({
       apiKey: "mimo-key",
       baseUrl: "https://api.xiaomimimo.com/v1",
-      model: "mimo-v2.5-pro"
+      model: "mimo-v2.5-pro",
+      flavor: "mimo"
     });
 
     await expect(callOpenAICompatible({ systemPrompt: "system", userPrompt: "user" })).resolves.toBe("mimo response");
@@ -99,6 +100,41 @@ describe("openai compatible client", () => {
         })
       })
     );
+  });
+
+  it("selects MiMo v2.5 for simple tasks and v2.5-pro for complex tasks", async () => {
+    process.env.MIMO_API_KEY = "mimo-key";
+    process.env.MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: "ok"
+            }
+          }
+        ]
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { callOpenAICompatible } = await import("@/lib/ai/openai-compatible-client");
+
+    await callOpenAICompatible({
+      systemPrompt: "system",
+      userPrompt: "user",
+      task: "gap_analysis"
+    });
+    await callOpenAICompatible({
+      systemPrompt: "system",
+      userPrompt: "user",
+      task: "rewrite"
+    });
+
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain("\"model\":\"mimo-v2.5\"");
+    expect(fetchMock.mock.calls[1]?.[1]?.body).toContain("\"model\":\"mimo-v2.5-pro\"");
   });
 
   it("parses JSON mode responses and returns null for invalid JSON", async () => {
