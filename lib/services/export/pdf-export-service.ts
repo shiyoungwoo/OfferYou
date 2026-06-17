@@ -1,5 +1,5 @@
-import path from "node:path";
 import { chromium } from "@playwright/test";
+import { getStorageRoot } from "@/lib/runtime/storage-root";
 import { LocalStorageAdapter } from "@/lib/storage/local-storage-adapter";
 
 type RenderPdfInput = {
@@ -71,7 +71,7 @@ export async function renderPdfFromHtml(input: RenderPdfInput) {
       }
     });
 
-    const storage = new LocalStorageAdapter(path.join(process.cwd(), "storage"));
+    const storage = new LocalStorageAdapter(getStorageRoot());
     const stored = await storage.put({
       userId: input.userId,
       kind: "export_pdf",

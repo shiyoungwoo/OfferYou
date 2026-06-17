@@ -137,6 +137,37 @@ describe("openai compatible client", () => {
     expect(fetchMock.mock.calls[1]?.[1]?.body).toContain("\"model\":\"mimo-v2.5-pro\"");
   });
 
+  it("uses MiMo v2.5 for resume calibration vision tasks", async () => {
+    process.env.MIMO_API_KEY = "mimo-key";
+    process.env.MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
+    process.env.MIMO_MODEL_COMPLEX = "mimo-v2.5-pro";
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: "ok"
+            }
+          }
+        ]
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { callOpenAICompatible } = await import("@/lib/ai/openai-compatible-client");
+
+    await callOpenAICompatible({
+      systemPrompt: "system",
+      userPrompt: "user",
+      task: "resume_calibration"
+    });
+
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain("\"model\":\"mimo-v2.5\"");
+    expect(fetchMock.mock.calls[0]?.[1]?.body).not.toContain("\"model\":\"mimo-v2.5-pro\"");
+  });
+
   it("parses JSON mode responses and returns null for invalid JSON", async () => {
     process.env.OPENAI_API_KEY = "openai-key";
     process.env.OPENAI_BASE_URL = "https://example.com/v1";

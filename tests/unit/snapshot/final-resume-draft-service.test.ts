@@ -7,9 +7,9 @@ describe("generateFinalResumeDraft", () => {
       calibratedResume: {
         status: "confirmed",
         personalInfo: {
-          name: "吴世阳",
-          phone: "18513449520",
-          email: "434995517@qq.com"
+          name: "示例候选人",
+          phone: "13800000000",
+          email: "candidate@example.com"
         },
         entries: [
           {
@@ -67,7 +67,7 @@ describe("generateFinalResumeDraft", () => {
       jobTitle: "AI 产品经理"
     });
 
-    expect(document.header.name).toBe("吴世阳");
+    expect(document.header.name).toBe("示例候选人");
     expect(document.header.title).toBe("AI 产品经理");
     expect(JSON.stringify(document)).toContain("Built AI product workflow");
     expect(JSON.stringify(document.sections.find((section) => section.id === "education")?.items)).toContain(
@@ -80,9 +80,9 @@ describe("generateFinalResumeDraft", () => {
       calibratedResume: {
         status: "confirmed",
         personalInfo: {
-          name: "吴世阳",
-          phone: "18513449520",
-          email: "434995517@qq.com"
+          name: "示例候选人",
+          phone: "13800000000",
+          email: "candidate@example.com"
         },
         entries: [
           {

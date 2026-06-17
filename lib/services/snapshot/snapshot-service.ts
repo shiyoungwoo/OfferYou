@@ -1,4 +1,4 @@
-import { executeSql, querySql, sqlString } from "@/lib/db";
+import { executeSqlParams, querySqlParams } from "@/lib/db";
 import { composeSnapshotDocument } from "@/lib/services/snapshot/snapshot-composer";
 import { readWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import type { ResumeDocument } from "@/lib/document/resume-document";
@@ -38,8 +38,9 @@ export async function generateSnapshotForDraft(draftId: string) {
 }
 
 export async function readSnapshotForDraft(draftId: string): Promise<ResumeDocument | null> {
-  const rows = await querySql<{ payload_json: string }>(
-    `SELECT payload_json FROM snapshots WHERE draft_id = ${sqlString(draftId)} LIMIT 1;`
+  const rows = await querySqlParams<{ payload_json: string }>(
+    "SELECT payload_json FROM snapshots WHERE draft_id = ? LIMIT 1;",
+    [draftId]
   );
 
   if (rows.length === 0) {
@@ -51,20 +52,15 @@ export async function readSnapshotForDraft(draftId: string): Promise<ResumeDocum
 }
 
 export async function saveSnapshotDocument(draftId: string, document: ResumeDocument) {
-  await executeSql(`
-    INSERT INTO snapshots (draft_id, template_key, payload_json, created_at, updated_at)
-    VALUES (
-      ${sqlString(draftId)},
-      ${sqlString(document.templateKey)},
-      ${sqlString(JSON.stringify(document))},
-      CURRENT_TIMESTAMP,
-      CURRENT_TIMESTAMP
-    )
-    ON CONFLICT(draft_id) DO UPDATE SET
-      template_key = excluded.template_key,
-      payload_json = excluded.payload_json,
-      updated_at = CURRENT_TIMESTAMP;
-  `);
+  await executeSqlParams(
+    `INSERT INTO snapshots (draft_id, template_key, payload_json, created_at, updated_at)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(draft_id) DO UPDATE SET
+       template_key = excluded.template_key,
+       payload_json = excluded.payload_json,
+       updated_at = CURRENT_TIMESTAMP;`,
+    [draftId, document.templateKey, JSON.stringify(document)]
+  );
 }
 
 async function estimateSnapshotPageCount(document: ResumeDocument) {

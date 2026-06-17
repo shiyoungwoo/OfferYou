@@ -12,14 +12,14 @@ type ExportPdfButtonProps = {
 export function ExportPdfButton({ draftId, document }: ExportPdfButtonProps) {
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [recordPath, setRecordPath] = useState<string | null>(null);
+  const [downloadPath, setDownloadPath] = useState<string | null>(null);
   const pageLabel = document ? getResumePageWaterLabel(estimateResumePageCount(document)) : null;
 
 
   function handleExport() {
     startTransition(async () => {
       setStatusMessage(null);
-      setRecordPath(null);
+      setDownloadPath(null);
       const exportDocument = document
         ? {
             ...document,
@@ -37,9 +37,8 @@ export function ExportPdfButton({ draftId, document }: ExportPdfButtonProps) {
 
       const payload = (await response.json()) as {
         storagePath?: string;
+        downloadPath?: string;
         error?: string;
-        recordPath?: string;
-        recordId?: string;
       };
 
       if (!response.ok) {
@@ -48,11 +47,17 @@ export function ExportPdfButton({ draftId, document }: ExportPdfButtonProps) {
       }
 
       setStatusMessage("PDF 已生成，开始下载...");
-      setRecordPath(payload.recordPath ?? null);
+      setDownloadPath(payload.downloadPath ?? null);
 
-      if (payload.recordId) {
-        // Trigger browser download by navigating to the download endpoint
-        window.location.href = `/api/records/${payload.recordId}/download`;
+      if (payload.downloadPath) {
+        // 使用 <a download> 触发下载，不离开当前页面
+        const link = window.document.createElement("a");
+        link.href = payload.downloadPath;
+        link.download = "";
+        link.style.display = "none";
+        window.document.body.appendChild(link);
+        link.click();
+        window.document.body.removeChild(link);
       }
     });
   }
@@ -70,12 +75,12 @@ export function ExportPdfButton({ draftId, document }: ExportPdfButtonProps) {
         {isPending ? "处理中…" : "确认内容并导出 PDF"}
       </button>
 
-      {recordPath ? (
+      {downloadPath ? (
         <a
           className="text-xs font-medium text-accent transition hover:text-accent/80"
-          href={recordPath}
+          href={downloadPath}
         >
-          查看这次简历记录
+          重新下载 PDF
         </a>
       ) : null}
 

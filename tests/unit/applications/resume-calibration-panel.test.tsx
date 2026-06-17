@@ -10,9 +10,9 @@ describe("ResumeCalibrationPanel", () => {
         calibratedResume={{
           status: "needs_review",
           personalInfo: {
-            name: "吴世阳",
-            phone: "18513449520",
-            email: "434995517@qq.com",
+            name: "示例候选人",
+            phone: "13800000000",
+            email: "candidate@example.com",
             portfolio: "portfolio.link",
             github: "github.com/wsyoung",
             educationSummary: "对外经济贸易大学 · 硕士"
@@ -40,7 +40,7 @@ describe("ResumeCalibrationPanel", () => {
 
     expect(screen.getByText("简历结构校准")).toBeTruthy();
     expect(screen.getByText("需要确认")).toBeTruthy();
-    expect(screen.getByText("吴世阳")).toBeTruthy();
+    expect(screen.getByText("示例候选人")).toBeTruthy();
     expect(screen.getAllByRole("listitem")[0]?.textContent).toContain("疑似 OCR 识别异常：O\"erYou");
   });
 

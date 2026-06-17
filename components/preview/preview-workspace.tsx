@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useTransition, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ExportPdfButton } from "@/components/preview/export-pdf-button";
+import { MarkAppliedButton } from "@/components/preview/mark-applied-button";
 import { ResumePreview } from "@/components/preview/resume-preview";
 import { TemplateSwitcher } from "@/components/preview/template-switcher";
 import { normalizeResumeTemplateKey, type ResumeDocument, type ResumeDocumentEntryItem } from "@/lib/document/resume-document";
@@ -10,9 +11,10 @@ import { normalizeResumeTemplateKey, type ResumeDocument, type ResumeDocumentEnt
 type PreviewWorkspaceProps = {
   draftId: string;
   initialDocument: ResumeDocument;
+  canCreateApplicationRecord?: boolean;
 };
 
-export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceProps) {
+export function PreviewWorkspace({ draftId, initialDocument, canCreateApplicationRecord = false }: PreviewWorkspaceProps) {
   const normalizedInitialDocument = useMemo(
     () => ({
       ...initialDocument,
@@ -199,7 +201,16 @@ export function PreviewWorkspace({ draftId, initialDocument }: PreviewWorkspaceP
             <span>←</span>
             返回分析工作台
           </Link>
+          <button
+            className="rounded-full border border-line bg-white px-4 py-2 text-xs font-bold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isPending || !dirty}
+            onClick={saveDocument}
+            type="button"
+          >
+            {isPending ? "保存中…" : dirty ? "保存简历" : "已保存"}
+          </button>
           <ExportPdfButton document={document} draftId={draftId} />
+          <MarkAppliedButton draftId={draftId} disabled={!canCreateApplicationRecord} />
         </div>
       </nav>
 

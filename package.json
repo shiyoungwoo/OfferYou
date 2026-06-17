@@ -14,13 +14,17 @@
     "export:fixtures": "node --experimental-transform-types --import ./scripts/register-alias.mjs scripts/export-job-apply-fixtures.mjs",
     "report:self-use": "node --experimental-transform-types --import ./scripts/register-alias.mjs scripts/run-self-use-beta-report.mjs",
     "report:real-trial": "node --experimental-transform-types --import ./scripts/register-alias.mjs scripts/run-real-self-use-trial.mjs",
-    "check:vnext": "node scripts/check-vnext-mvp.mjs"
+    "check:vnext": "node scripts/check-vnext-mvp.mjs",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "desktop:check": "node scripts/desktop/wait-for-health.mjs"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^1.52.0",
+    "@llamaindex/liteparse": "^2.0.4",
     "better-sqlite3": "^12.9.0",
     "lucide-react": "^1.0.0",
-    "next": "^15.2.3",
+    "next": "^15.5.18",
     "pdf-parse": "1.1.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -29,6 +33,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.51.1",
+    "@tauri-apps/cli": "^2.11.2",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@types/better-sqlite3": "^7.6.13",
@@ -43,7 +48,12 @@
     "typescript": "^5.8.2",
     "vitest": "^3.0.8"
   },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3"]
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

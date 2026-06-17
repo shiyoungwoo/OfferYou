@@ -131,6 +131,7 @@ export function SuggestionList({ draftId, suggestions }: SuggestionListProps) {
                   className="flex w-full flex-wrap items-center justify-between gap-4 text-left"
                   onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}
                   type="button"
+                  aria-expanded={isExpanded}
                 >
                   <span className="text-2xl font-semibold text-ink">{group.title}</span>
                   <span className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-600">
@@ -655,107 +656,10 @@ async function syncGroupedSuggestionDecision({
   }
 }
 
-function SuggestionBlock({ label, text, accent = false }: { label: string; text: string; accent?: boolean }) {
-  return (
-    <div className={`rounded-[1.25rem] border p-4 ${accent ? "border-accent/20 bg-accent/5" : "border-line bg-white"}`}>
-      <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{label}</p>
-      <p className="mt-3 text-sm leading-6 text-slate-700 whitespace-pre-wrap">{text}</p>
-    </div>
-  );
-}
-
-function getSuggestionIntentLabel(suggestion: WorkspaceSuggestion) {
-  if (isTalentAmplificationSuggestion(suggestion)) {
-    return "突出天然优势";
-  }
-
-  if (suggestion.sourceKind === "target_role_fit") {
-    return "岗位匹配更清楚";
-  }
-
-  if (suggestion.sourceKind === "master_fact") {
-    return "保留事实，增强说服力";
-  }
-
-  if (suggestion.sourceKind === "revision") {
-    return "继续微调";
-  }
-
-  return "把经历讲得更有重点";
-}
-
-function getSuggestionDirectionCopy(suggestion: WorkspaceSuggestion) {
-  if (isTalentAmplificationSuggestion(suggestion)) {
-    return "这条建议会更主动地把你的优势特质写出来。";
-  }
-
-  if (suggestion.sourceKind === "target_role_fit") {
-    return "这条建议重点是让招聘方更快看懂你为什么适合。";
-  }
-
-  if (suggestion.sourceKind === "master_fact") {
-    return "这条建议重点是保留真实经历，同时让证据更有力量。";
-  }
-
-  if (suggestion.sourceKind === "revision") {
-    return "这条建议是根据你的反馈继续调整后的版本。";
-  }
-
-  return "这条建议重点是把原始表达变得更清楚、更聚焦。";
-}
-
 function getSuggestionStatusLabel(status: WorkspaceSuggestion["status"]) {
-  if (status === "accepted") {
-    return "已接受";
-  }
-
-  if (status === "rejected") {
-    return "已拒绝";
-  }
-
+  if (status === "accepted") return "已接受";
+  if (status === "rejected") return "已拒绝";
   return "待处理";
-}
-
-function isTalentAmplificationSuggestion(suggestion: WorkspaceSuggestion) {
-  const reason = suggestion.reasonText.toLowerCase();
-  return (
-    reason.includes("underlying talent") ||
-    suggestion.reasonText.includes("底层的优势") ||
-    suggestion.reasonText.includes("自然工作方式")
-  );
-}
-
-function parseExtendedReasonText(reasonText: string) {
-  const qualityMarker = "；质量提示：";
-  const gapMarker = "【JD 缺失能力提醒】：";
-  
-  let baseReason = reasonText;
-  let qualityNotes: string[] = [];
-  let gapReminders: string[] = [];
-
-  // Extract quality notes
-  const qIndex = baseReason.indexOf(qualityMarker);
-  if (qIndex !== -1) {
-    const qPart = baseReason.slice(qIndex + qualityMarker.length);
-    qualityNotes = qPart.split(/[；;]+/u).map(n => n.trim()).filter(Boolean);
-    baseReason = baseReason.slice(0, qIndex).trim();
-  }
-
-  // Extract gap reminders
-  const segments = baseReason.split(gapMarker);
-  if (segments.length > 1) {
-    baseReason = segments[0].trim();
-    gapReminders = segments.slice(1).map(s => {
-      const endIdx = s.indexOf("；");
-      return endIdx !== -1 ? s.slice(0, endIdx).trim() : s.trim();
-    }).filter(Boolean);
-  }
-
-  return {
-    baseReason: baseReason.replace(/[；;]+$/u, "").trim(),
-    gapReminders,
-    qualityNotes
-  };
 }
 
 function firstUsefulLine(text: string) {

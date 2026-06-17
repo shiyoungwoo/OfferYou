@@ -22,10 +22,10 @@ export function MasterInsightList({ insights }: MasterInsightListProps) {
     <section className="rounded-[1.75rem] border border-line bg-white/85 p-6 shadow-card">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">洞察候选</p>
-          <h2 className="mt-3 text-2xl font-semibold">从资料里长出来的可能优势</h2>
+          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">优势洞察</p>
+          <h2 className="mt-3 text-2xl font-semibold">已识别的优势线索</h2>
         </div>
-        <div className="rounded-full border border-line px-4 py-2 text-sm text-slate-600">{insights.length} 条候选</div>
+        <div className="rounded-full border border-line px-4 py-2 text-sm text-slate-600">{insights.length} 条洞察</div>
       </div>
 
       <div className="mt-6 space-y-4">
@@ -41,7 +41,7 @@ export function MasterInsightList({ insights }: MasterInsightListProps) {
           ))
         ) : (
           <div className="rounded-[1.35rem] border border-dashed border-line bg-paper p-5 text-sm leading-6 text-slate-700">
-            暂无已确认洞察。完成天赋发现后，可在这里沉淀可复用优势。
+            完成天赋发掘后，这里会显示已保存的优势线索。
           </div>
         )}
       </div>

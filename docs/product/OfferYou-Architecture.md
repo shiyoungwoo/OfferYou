@@ -8,7 +8,7 @@
 
 ## 2. 架构目标
 
-OfferYou 采用 Agent-first 架构。系统核心不是页面路由，而是一次可追踪、可暂停、可恢复、可验证的 `JobApplyRun`。
+OfferYou 采用 Agent-first 架构。系统核心不是页面路由，而是一次可追踪、可暂停、可恢复、可验证的 `JobApplyRun`，以及围绕单个目标岗位沉淀的 `OpportunityCard`。
 
 架构目标：
 
@@ -17,6 +17,8 @@ OfferYou 采用 Agent-first 架构。系统核心不是页面路由，而是一�
 - 让代码负责状态、数据边界、工具调用和 PDF 稳定性。
 - 让用户在关键风险点确认。
 - 保证预览、PDF 和面试准备读取同一份最终草稿。
+- 让每个岗位机会串联简历定制、投递、面试准备、面试日程和结果记录。
+- 让 `TalentProfile` 作为低频生成、高频调用的长期职业画像。
 
 ## 3. 系统上下文
 
@@ -29,6 +31,7 @@ flowchart TD
   Run --> Tools["文件解析与 PDF 工具"]
   Run --> Store["本地数据与文件存储"]
   Run --> Export["PDF 导出"]
+  Run --> Opportunity["岗位机会卡"]
 ```
 
 ## 4. 容器架构
@@ -44,6 +47,7 @@ flowchart TD
 
   Orchestrator --> Gateway["Model Gateway"]
   Orchestrator --> Parser["Ingestion Tools"]
+  Orchestrator --> Talent["Talent Profile"]
   Gateway --> Provider["MiMo / OpenAI-compatible / Other Providers"]
   Parser --> ODL["OpenDataLab PDF"]
 
@@ -62,9 +66,11 @@ flowchart TD
 | Agent Orchestrator | 编排校准、JD 理解、策略、改写、校验、面试准备 |
 | Model Gateway | 统一模型调用、JSON 修复、trace 与风险记录 |
 | Ingestion Tools | PDF、DOCX、TXT、OCR 和多模态校准接入 |
+| Talent Profile Service | 管理天赋画像、职业优势和长期洞察 |
 | Snapshot Composer | 合成 FinalResumeDraft |
 | Resume Renderer | 渲染 Professional CN 和 ATS Clean |
 | PDF Export Service | 生成 PDF 并保证与预览主体一致 |
+| Opportunity Service | 聚合岗位快照、PDF、面试准备、日程和结果 |
 | Repository Layer | 数据读写、JSON 安全解析、版本记录 |
 
 ## 6. Agent Run 状态机
@@ -84,6 +90,11 @@ stateDiagram-v2
   snapshot_ready --> interview_ready
   export_ready --> application_recorded
   interview_ready --> application_recorded
+  application_recorded --> interview_scheduled
+  interview_scheduled --> interview_result_recorded
+  interview_result_recorded --> next_round_scheduled
+  interview_result_recorded --> [*]
+  next_round_scheduled --> interview_scheduled
   input_received --> failed_needs_human
   resume_calibrated --> failed_needs_human
   jd_analyzed --> failed_needs_human
@@ -102,7 +113,9 @@ stateDiagram-v2
 
 ### 7.3 Talent Profile Agent
 
-承接天赋挖掘流程，生成长期 `TalentProfile`，为岗位定制提供用户模型。
+承接天赋挖掘流程，生成长期 `TalentProfile`，为岗位定制、职业规划、自我介绍和面试回答提供用户模型。
+
+`TalentProfile` 是低频生成、高频调用的数据层。用户不需要每天进入天赋挖掘页面，但岗位定制、面试准备和职业规划必须能够读取它，并在界面上以用户能理解的方式说明「已使用哪些职业画像信息」。
 
 ### 7.4 JD Insight Agent
 
@@ -128,6 +141,22 @@ stateDiagram-v2
 
 基于 `FinalResumeDraft` 和 `JDInsight` 生成面试问题、自我介绍、追问方向、风险回答和反问问题。
 
+如果存在 `TalentProfile`，面试准备必须同时使用职业画像，输出更贴近用户优势的自我介绍和回答策略。
+
+### 7.10 Opportunity Agent
+
+维护单个岗位机会的完整状态，连接以下对象：
+
+- `JDInsight`。
+- `FinalResumeDraft`。
+- PDF 导出记录。
+- 面试准备。
+- 面试日程。
+- 面试结果。
+- 二面安排。
+
+它不负责生成内容，而负责让用户始终知道该岗位的当前状态和下一步动作。
+
 ## 8. AI 与代码职责边界
 
 ### 8.1 必须 AI 的节点
@@ -135,6 +164,7 @@ stateDiagram-v2
 以下节点不能用确定性规则替代，也不能用规则兜底冒充 AI：
 
 - 天赋挖掘与 `TalentProfile` 生成。
+- 基于 `TalentProfile` 的职业规划和岗位适配解释。
 - JD 理解。
 - 简历结构校准中的模块归属判断。
 - 视觉布局校准。
@@ -157,6 +187,8 @@ stateDiagram-v2
 - 数据库读写、JSON 安全解析、事务和并发保护。
 - `JobApplyRun` 状态机。
 - 建议接受、拒绝、编辑、微调的状态切换。
+- 岗位机会状态流转。
+- 面试日程、结果和二面记录。
 - `FinalResumeDraft` 合成。
 - 模板渲染、分页、PDF 导出。
 - 空字段隐藏。
@@ -174,6 +206,7 @@ stateDiagram-v2
 | Strategy Layer | `JDInsight`、匹配度、改写策略 | 模型主导，记录 trace |
 | Review Layer | 建议状态、人工编辑、AI 微调 | 所有进入成品的表达必须确认 |
 | Output Layer | `FinalResumeDraft`、PDF、面试准备、投递记录 | 预览、PDF、面试准备共享同一来源 |
+| Opportunity Layer | 岗位机会卡、面试日程、结果、二面 | 管理岗位生命周期和下一步动作 |
 
 ## 10. 核心数据对象
 
@@ -227,6 +260,21 @@ type FinalResumeDraft = {
 };
 ```
 
+```ts
+type OpportunityCard = {
+  id: string;
+  applicationId: string;
+  company: string;
+  role: string;
+  status: "drafting" | "applied" | "invited" | "first_round" | "second_round" | "ended";
+  snapshotId?: string;
+  pdfExportId?: string;
+  interviewPrepId?: string;
+  nextInterviewAt?: string;
+  nextAction: "customize_resume" | "prepare_interview" | "add_schedule" | "record_result" | "review_next_round";
+};
+```
+
 ## 11. 模型策略
 
 ### 11.1 模型模式
@@ -237,7 +285,14 @@ type FinalResumeDraft = {
 | 标准 AI 模式 | 常规 JD 理解、改写、校验和面试准备 |
 | 高质量 AI 模式 | JD 截图、多模态校准、复杂转岗、最终投递前复核 |
 
-### 11.2 模型调用规则
+### 11.2 TalentProfile 调用规则
+
+- 天赋挖掘入口低频展示，默认位于 `我的资料` 或首页成长模块。
+- `TalentProfile` 一旦存在，岗位定制、面试准备和职业规划默认读取。
+- 页面不得把天赋挖掘包装成每日任务。
+- 页面需要说明当前输出是否使用了职业画像，但不展示内部推理链。
+
+### 11.3 模型调用规则
 
 - 默认使用 OpenAI-compatible 网关。
 - 模型调用必须记录 provider、model、latency、generationMode、fallbackReason 和 riskNotes。

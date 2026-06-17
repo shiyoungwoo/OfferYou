@@ -47,7 +47,7 @@ describe("me status cards", () => {
     expect(screen.getAllByText("可用").length).toBeGreaterThan(0);
     expect(screen.getByText("未配置")).toBeTruthy();
     expect(screen.getByText("多模态模型")).toBeTruthy();
-    expect(screen.getByText(/岗位匹配、简历改写、面试准备/)).toBeTruthy();
+    expect(screen.getAllByText(/岗位匹配、简历改写、面试准备/).length).toBeGreaterThan(0);
     expect(screen.getByText("确定性兜底")).toBeTruthy();
     expect(screen.queryByText(/GEMINI_API_KEY|OPENAI_API_KEY|OPENAI_BASE_URL|OPENAI_MODEL/)).toBeNull();
   });

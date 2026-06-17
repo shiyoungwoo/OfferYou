@@ -4,7 +4,11 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { saveWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import { saveSnapshotDocument } from "@/lib/services/snapshot/snapshot-service";
-import { createApplicationRecord } from "@/lib/services/applications/application-record-service";
+import {
+  createApplicationRecord,
+  createManualApplicationRecord,
+  updateApplicationRecordInterviewContext
+} from "@/lib/services/applications/application-record-service";
 import { readApplicationRecord } from "@/lib/services/applications/application-record-service";
 import {
   createInterviewPrepFromRecord,
@@ -99,9 +103,9 @@ describe("interview-prep-service", () => {
     const snapshot: ResumeDocument = {
       templateKey: "professional-cn",
       header: {
-        name: "吴世阳",
+        name: "示例候选人",
         title: "AI 产品经理",
-        meta: ["手机：18513449520"]
+        meta: ["手机：13800000000"]
       },
       sections: [
         {
@@ -173,6 +177,222 @@ describe("interview-prep-service", () => {
     expect(reloaded?.selfIntroDraft).toContain("真实经历");
   });
 
+  it("optimizes an interview answer draft with the model", async () => {
+    const { callModelText } = await import("@/lib/ai/model-gateway");
+    vi.mocked(callModelText).mockClear();
+    vi.mocked(callModelText).mockResolvedValueOnce({
+      provider: "openai_compatible",
+      data: "优化后的答案：先给结论，再用 STAR 说明金融 AI 项目的背景、动作、结果和复盘。",
+      generationMode: "model"
+    });
+    const { optimizeInterviewAnswerDraft } = await import("@/lib/services/interview/interview-prep-service");
+
+    const result = await optimizeInterviewAnswerDraft({
+      company: "和讯网",
+      jobTitle: "金融 AI 产品经理",
+      questionText: "请介绍一个金融 AI 项目。",
+      answerDraft: "我做过一个 AI 项目。",
+      sourceType: "jd"
+    });
+
+    expect(callModelText).toHaveBeenCalledOnce();
+    expect(result.answerDraft).toContain("优化后的答案");
+    expect(result.generationMode).toBe("model");
+    expect(result.riskNote).toBeUndefined();
+  });
+
+  it("keeps the original answer draft when answer optimization model fails", async () => {
+    const { callModelText } = await import("@/lib/ai/model-gateway");
+    vi.mocked(callModelText).mockClear();
+    vi.mocked(callModelText).mockResolvedValueOnce({
+      provider: "deterministic_fallback",
+      data: null,
+      generationMode: "deterministic_fallback",
+      fallbackReason: "MiMo 调用失败，已切换到确定性回退。请求超时。"
+    });
+    const { optimizeInterviewAnswerDraft } = await import("@/lib/services/interview/interview-prep-service");
+
+    const result = await optimizeInterviewAnswerDraft({
+      company: "和讯网",
+      jobTitle: "金融 AI 产品经理",
+      questionText: "请介绍一个金融 AI 项目。",
+      answerDraft: "我做过一个 AI 项目。",
+      sourceType: "jd"
+    });
+
+    expect(result.answerDraft).toBe("我做过一个 AI 项目。");
+    expect(result.generationMode).toBe("deterministic_fallback");
+    expect(result.riskNote).toContain("AI 优化失败");
+    expect(result.riskNote).toContain("请求超时");
+  });
+
+  it("creates interview prep for a manual interview record without a resume snapshot", async () => {
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+    vi.mocked(callModelJSON).mockClear();
+    const record = await createManualApplicationRecord({
+      company: "深势科技",
+      jobTitle: "AI 产品经理",
+      appliedAt: "2026-06-18T02:30:00.000Z"
+    });
+
+    const prep = await createInterviewPrepFromRecord(record.id);
+
+    expect(callModelJSON).not.toHaveBeenCalled();
+    expect(prep.applicationRecordId).toBe(record.id);
+    expect(prep.draftId).toBe("");
+    expect(prep.company).toBe("深势科技");
+    expect(prep.jobTitle).toBe("AI 产品经理");
+    expect(prep.questions).toHaveLength(3);
+    expect(new Set(prep.questions.map((question) => question.sourceType))).toEqual(new Set(["basic"]));
+    expect(prep.selfIntroDraft).toContain("深势科技");
+    expect(prep.generationMode).toBe("deterministic_fallback");
+    expect(prep.riskNotes?.join(" ")).toContain("未提供 JD、公司资料或简历快照");
+  });
+
+  it("regenerates unsafe old model prep when a manual record has no evidence", async () => {
+    const record = await createManualApplicationRecord({
+      company: "深圳硅基万物科技有限公司",
+      jobTitle: "AI 产品经理",
+      appliedAt: "2026-06-18T02:30:00.000Z"
+    });
+    await saveInterviewPrep({
+      id: `interview-${record.id}`,
+      applicationRecordId: record.id,
+      draftId: "",
+      company: record.company,
+      jobTitle: record.jobTitle,
+      candidateName: "OfferYou 用户",
+      selfIntroDraft: "我是模型基于公司名推断的自我介绍。",
+      questions: [
+        {
+          id: `interview-${record.id}-q1`,
+          questionText: "旧问题：请结合快照说明项目经验。",
+          sourceType: "snapshot",
+          favorite: false,
+          answerDraft: "旧答案"
+        }
+      ],
+      generationMode: "model",
+      modelProvider: "openai_compatible",
+      createdAt: "2026-06-18T02:30:00.000Z",
+      updatedAt: "2026-06-18T02:30:00.000Z"
+    });
+
+    const prep = await createInterviewPrepFromRecord(record.id);
+
+    expect(prep.generationMode).toBe("deterministic_fallback");
+    expect(prep.modelProvider).toBeUndefined();
+    expect(prep.questions).toHaveLength(3);
+    expect(prep.questions.every((question) => question.sourceType === "basic")).toBe(true);
+    expect(prep.selfIntroDraft).not.toContain("模型基于公司名推断");
+  });
+
+  it("uses model generation after the user adds JD or company context", async () => {
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+    vi.mocked(callModelJSON).mockClear();
+    vi.mocked(callModelJSON).mockResolvedValueOnce({
+      provider: "openai_compatible",
+      data: {
+        selfIntroDraft: "我是基于补充 JD 生成的自我介绍。",
+        questions: [
+          { questionText: "基于 JD 的问题 1", sourceType: "jd", answerDraft: "" },
+          { questionText: "基于 JD 的问题 2", sourceType: "jd", answerDraft: "" },
+          { questionText: "基于公司资料的问题 3", sourceType: "inferred", answerDraft: "" },
+          { questionText: "基于岗位要求的问题 4", sourceType: "jd", answerDraft: "" },
+          { questionText: "基于岗位要求的问题 5", sourceType: "jd", answerDraft: "" }
+        ]
+      },
+      generationMode: "model"
+    });
+    const record = await createManualApplicationRecord({
+      company: "深势科技",
+      jobTitle: "AI 产品经理",
+      appliedAt: "2026-06-18T02:30:00.000Z"
+    });
+    await updateApplicationRecordInterviewContext({
+      recordId: record.id,
+      interviewContextText: "JD 岗位要求：负责 AI 产品规划、用户需求分析、模型能力评估、跨团队推动产品落地。公司信息：深势科技关注 AI for Science 产品。"
+    });
+
+    const prep = await createInterviewPrepFromRecord(record.id, { force: true });
+
+    expect(callModelJSON).toHaveBeenCalledOnce();
+    expect(prep.generationMode).toBe("model");
+    expect(prep.questions.length).toBeGreaterThanOrEqual(5);
+    expect(prep.questions.some((question) => question.sourceType === "jd")).toBe(true);
+  });
+
+  it("keeps a specific model failure reason when manual interview context exists", async () => {
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+    vi.mocked(callModelJSON).mockClear();
+    vi.mocked(callModelJSON).mockResolvedValueOnce({
+      provider: "deterministic_fallback",
+      data: null,
+      generationMode: "deterministic_fallback",
+      fallbackReason: "Gemini 调用失败，已切换到确定性回退。请求超时。"
+    });
+    const record = await createManualApplicationRecord({
+      company: "和讯网",
+      jobTitle: "金融 AI 产品经理",
+      appliedAt: "2026-06-18T02:30:00.000Z"
+    });
+    await updateApplicationRecordInterviewContext({
+      recordId: record.id,
+      interviewContextText: "JD 岗位要求：负责金融场景 AI 产品规划、需求分析、模型能力评估、跨团队推动产品落地，并关注风控、投研和客服场景。公司资料：和讯网关注金融资讯和内容服务。"
+    });
+
+    const prep = await createInterviewPrepFromRecord(record.id, { force: true });
+
+    expect(prep.generationMode).toBe("deterministic_fallback");
+    expect(prep.riskNotes?.join(" ")).toContain("Gemini 调用失败");
+    expect(prep.riskNotes?.join(" ")).not.toContain("未提供 JD、公司资料或简历快照");
+  });
+
+  it("preserves existing AI interview prep when forced regeneration fails", async () => {
+    const { callModelJSON } = await import("@/lib/ai/model-gateway");
+    vi.mocked(callModelJSON).mockClear();
+    vi.mocked(callModelJSON).mockRejectedValueOnce(new Error("Gemini API 调用超时。"));
+    const record = await createManualApplicationRecord({
+      company: "和讯网",
+      jobTitle: "金融 AI 产品经理",
+      appliedAt: "2026-06-18T02:30:00.000Z"
+    });
+    await updateApplicationRecordInterviewContext({
+      recordId: record.id,
+      interviewContextText: "JD 岗位要求：负责金融场景 AI 产品规划、需求分析、模型能力评估、跨团队推动产品落地，并关注风控、投研和客服场景。公司资料：和讯网关注金融资讯和内容服务。"
+    });
+    await saveInterviewPrep({
+      id: `interview-${record.id}`,
+      applicationRecordId: record.id,
+      draftId: "",
+      company: record.company,
+      jobTitle: record.jobTitle,
+      candidateName: "OfferYou 用户",
+      selfIntroDraft: "上一版 AI 自我介绍。",
+      questions: [
+        {
+          id: `interview-${record.id}-q1`,
+          questionText: "上一版 AI 问题",
+          sourceType: "jd",
+          favorite: false,
+          answerDraft: ""
+        }
+      ],
+      generationMode: "model",
+      modelProvider: "gemini",
+      createdAt: "2026-06-18T02:30:00.000Z",
+      updatedAt: "2026-06-18T02:30:00.000Z"
+    });
+
+    const prep = await createInterviewPrepFromRecord(record.id, { force: true });
+
+    expect(prep.generationMode).toBe("model");
+    expect(prep.selfIntroDraft).toBe("上一版 AI 自我介绍。");
+    expect(prep.questions[0]?.questionText).toBe("上一版 AI 问题");
+    expect(prep.riskNotes?.join(" ")).toContain("本次重新生成失败");
+    expect(prep.riskNotes?.join(" ")).toContain("已保留上一次 AI 面试准备");
+  });
+
   it("generates interview prep with model output when available", async () => {
     const { callModelJSON } = await import("@/lib/ai/model-gateway");
     vi.mocked(callModelJSON).mockResolvedValueOnce({
@@ -218,7 +438,8 @@ describe("interview-prep-service", () => {
     expect(prep.questions.length).toBeGreaterThanOrEqual(5);
     expect(prep.generationMode).toBe("deterministic_fallback");
     expect(prep.riskNotes).toBeDefined();
-    expect(prep.riskNotes!.join(" ")).toContain("模型暂不可用");
+    expect(prep.riskNotes!.join(" ")).toContain("模型调用失败");
+    expect(prep.riskNotes!.join(" ")).toContain("Model timeout");
   });
 
   it("returns null for corrupted interview prep payloads", async () => {

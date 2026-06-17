@@ -114,8 +114,8 @@ describe("calibrateResumeStructureDeterministic", () => {
   it("keeps education in education section and suspicious OCR text in warnings", () => {
     const result = calibrateResumeStructureDeterministic({
       resumeText: [
-        "吴世阳",
-        "手机：18513449520 邮箱：434995517@qq.com",
+        "示例候选人",
+        "手机：13800000000 邮箱：candidate@example.com",
         "项目经历",
         "O\"erYou ) AI 岗位定制简历助手 2026.03 - 至今",
         "独立完成产品定义与 MVP 范围收敛。",
@@ -124,8 +124,8 @@ describe("calibrateResumeStructureDeterministic", () => {
       ].join("\\n")
     });
 
-    expect(result.personalInfo.name).toBe("吴世阳");
-    expect(result.personalInfo.phone).toBe("18513449520");
+    expect(result.personalInfo.name).toBe("示例候选人");
+    expect(result.personalInfo.phone).toBe("13800000000");
     expect(result.entries.some((entry) => entry.section === "education" && entry.title.includes("对外经济贸易大学"))).toBe(true);
     expect(result.parseWarnings.some((warning) => warning.includes("O\\\"erYou"))).toBe(true);
     expect(result.status).toBe("needs_review");

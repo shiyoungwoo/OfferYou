@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { getStorageRoot } from "@/lib/runtime/storage-root";
 
 const SQLITE_BUSY_TIMEOUT_MS = 5000;
 let dbInstance: Database.Database | null = null;
@@ -8,7 +9,7 @@ let databaseReadyPromise: Promise<void> | null = null;
 let databaseReadyPath: string | null = null;
 
 function getDatabasePath() {
-  return path.join(process.cwd(), "storage", "offeryou.sqlite");
+  return path.join(getStorageRoot(), "offeryou.sqlite");
 }
 
 function escapeSql(value: string) {
@@ -23,7 +24,7 @@ function getDb(): Database.Database {
 }
 
 async function initializeDatabase() {
-  await mkdir(path.join(process.cwd(), "storage"), { recursive: true });
+  await mkdir(getStorageRoot(), { recursive: true });
 
   const db = new Database(getDatabasePath());
   db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
@@ -46,6 +47,19 @@ async function initializeDatabase() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS resume_versions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      draft_id TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      target_title TEXT NOT NULL,
+      template_key TEXT NOT NULL,
+      source_type TEXT NOT NULL,
+      document_json TEXT NOT NULL,
+      pdf_storage_path TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE TABLE IF NOT EXISTS application_records (
       id TEXT PRIMARY KEY,
       draft_id TEXT NOT NULL,
@@ -58,6 +72,19 @@ async function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS interview_preps (
       id TEXT PRIMARY KEY,
       application_record_id TEXT NOT NULL UNIQUE,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS interview_schedules (
+      id TEXT PRIMARY KEY,
+      application_record_id TEXT UNIQUE,
+      user_id TEXT NOT NULL,
+      company TEXT NOT NULL,
+      job_title TEXT NOT NULL,
+      interview_at TEXT NOT NULL,
+      source TEXT NOT NULL,
+      status TEXT NOT NULL,
       payload_json TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -85,6 +112,12 @@ async function initializeDatabase() {
       status TEXT NOT NULL,
       payload_json TEXT NOT NULL,
       confirmed_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS talent_excavation_drafts (
+      user_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -149,6 +182,7 @@ export async function querySql<T>(sql: string): Promise<T[]> {
   return stmt.all() as T[];
 }
 
+/** @deprecated 仅限测试使用。生产代码请用 executeSqlParams / querySqlParams。 */
 export function sqlString(value: string) {
   return `'${escapeSql(value)}'`;
 }

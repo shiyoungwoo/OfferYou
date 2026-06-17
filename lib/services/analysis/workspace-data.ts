@@ -2,6 +2,7 @@ import { readWorkspaceDraft } from "@/lib/services/analysis/workspace-repository
 import { cleanGeneratedResumeText, normalizeOcrResumeText } from "@/lib/services/analysis/text-cleaner";
 import type { CalibratedResumeProfile } from "@/lib/services/calibration/resume-calibration-types";
 import type { GenerationMode, JDInsight, RewriteStrategy, RewriteVerification } from "@/lib/services/job-apply/agent-run";
+import type { ModelProviderKey } from "@/lib/ai/model-provider-config";
 
 export type WorkspaceSummary = {
   fitScore: number;
@@ -30,7 +31,7 @@ export type WorkspaceSuggestion = {
   sourceKind: "resume_baseline" | "master_fact" | "target_role_fit" | "revision";
   sourceLabel: string;
   generationMode?: GenerationMode;
-  modelProvider?: "gemini" | "openai_compatible" | "deterministic_fallback";
+  modelProvider?: ModelProviderKey;
   modelFallbackReason?: string;
   jdAbility?: string;
   factAnchors?: string[];

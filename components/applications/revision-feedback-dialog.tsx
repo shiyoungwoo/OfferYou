@@ -30,28 +30,40 @@ export function RevisionFeedbackDialog({
   const [feedbackType, setFeedbackType] = useState<(typeof feedbackOptions)[number]>("too_generic");
   const [feedbackText, setFeedbackText] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!open) {
     return null;
   }
 
   function submitRevision() {
+    setErrorMsg(null);
     startTransition(async () => {
-      await fetch(`/api/drafts/${draftId}/suggestions/${suggestionId}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          action: "revise",
-          feedbackType,
-          feedbackText
-        })
-      });
+      try {
+        const response = await fetch(`/api/drafts/${draftId}/suggestions/${suggestionId}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            action: "revise",
+            feedbackType,
+            feedbackText
+          })
+        });
 
-      setFeedbackText("");
-      onClose();
-      await onActionComplete();
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          setErrorMsg(body?.error ?? "提交失败，请稍后重试。");
+          return;
+        }
+
+        setFeedbackText("");
+        onClose();
+        await onActionComplete();
+      } catch {
+        setErrorMsg("网络请求失败，请检查网络后重试。");
+      }
     });
   }
 
@@ -83,6 +95,8 @@ export function RevisionFeedbackDialog({
           />
         </label>
 
+        {errorMsg && <p className="text-xs text-rose-500">{errorMsg}</p>}
+
         <div className="flex flex-wrap gap-3">
           <button
             className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
@@ -90,7 +104,7 @@ export function RevisionFeedbackDialog({
             onClick={submitRevision}
             type="button"
           >
-            提交反馈
+            {isPending ? "提交中…" : "提交反馈"}
           </button>
           <button
             className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700"

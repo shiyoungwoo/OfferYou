@@ -56,7 +56,7 @@ export async function composeSnapshotDocument(draft: PersistedWorkspaceDraft): P
   const resumeSignals = calibratedData?.signals ?? extractResumeSignals(resumeText);
   const resumeSections = calibratedData?.sections ?? extractResumeSections(resumeText);
   const jdText = await readDraftJdText(draft);
-  const targetTitle = resolveTargetTitle(draft, jdText);
+  const targetTitle = resolveTargetTitle(draft, jdText, resumeSignals.name);
   const roleContext = { targetTitle, jdText };
   const calibrationWarning =
     calibratedResume && calibratedResume.status !== "confirmed"
@@ -110,11 +110,17 @@ function buildPersonalInfoItems(
   resumeSignals: ReturnType<typeof extractResumeSignals>,
   resumeSections: ReturnType<typeof extractResumeSections>
 ) {
-  const education = formatEducationSummary(resumeSections.education[0]);
+  const education = formatHighestEducationSummary(resumeSections.education);
   const language = extractLanguageSummary(resumeSections.skills);
   const items = [
     resumeSignals.phone ? `手机：${resumeSignals.phone}` : "",
-    resumeSignals.email ? `邮箱：${resumeSignals.email} ｜ 求职意向：${targetTitle}` : `求职意向：${targetTitle}`,
+    resumeSignals.email && targetTitle
+      ? `邮箱：${resumeSignals.email} ｜ 求职意向：${targetTitle}`
+      : resumeSignals.email
+        ? `邮箱：${resumeSignals.email}`
+        : targetTitle
+          ? `求职意向：${targetTitle}`
+          : "",
     education ? `学历：${education}` : "",
     language ? `英语：${language}` : "",
     resumeSignals.location ? `居住地：${resumeSignals.location}` : "",
@@ -155,8 +161,11 @@ function buildStrengthItems(
     } else if (originalSummaryEntry && originalSummaryEntry.bullets && originalSummaryEntry.bullets.length > 0) {
       resultLines = originalSummaryEntry.bullets;
     } else {
-      // Last resort: AI analysis strengths
+      // Last resort: AI analysis strengths or extractive facts from the resume.
       resultLines = (draft.analysis?.strengths ?? []).filter(isResumeReadyChineseLine);
+      if (resultLines.length === 0) {
+        resultLines = deriveStrengthsFromResumeSections(resumeSections);
+      }
     }
   }
 
@@ -212,6 +221,11 @@ function buildWorkExperienceItems(
   resumeSections: ReturnType<typeof extractResumeSections>,
   suggestions: PersistedWorkspaceDraft["suggestions"]
 ) {
+  if (isResumeOnlyDraft(draft)) {
+    return dedupeResumeOnlyEntries(resumeSections.work)
+      .map(preserveOriginalEntryForResume);
+  }
+
   const rawWorkEntries = draft.calibratedResume ? [] : extractRawSectionEntries(draft.resumeExtractedText ?? "", "work");
   const suggestionEntries = suggestions
     .filter((suggestion) => isSuggestionForSection(suggestion, ["experience"]) && !isInternshipLike(suggestion.afterText))
@@ -264,6 +278,11 @@ function buildProjectItems(
   resumeSections: ReturnType<typeof extractResumeSections>,
   suggestions: PersistedWorkspaceDraft["suggestions"]
 ) {
+  if (isResumeOnlyDraft(draft)) {
+    return dedupeResumeOnlyEntries(normalizeProjectEntries(resumeSections.projects))
+      .map(preserveOriginalEntryForResume);
+  }
+
   const projectSuggestions = suggestions
     .filter((suggestion) => isSuggestionForSection(suggestion, ["project"]))
     .map((suggestion) => createSuggestionEntry(suggestion))
@@ -366,6 +385,23 @@ function formatEducationSummary(entry?: ParsedResumeEntry) {
   return [school, degree].filter(Boolean).join(" · ");
 }
 
+function formatHighestEducationSummary(entries: ParsedResumeEntry[]) {
+  const ranked = entries
+    .map((entry, index) => ({
+      entry,
+      index,
+      degreeRank: getDegreeRank(extractEducationDegree(entry)),
+      dateRank: extractEducationEndYear(entry.meta)
+    }))
+    .sort((left, right) => {
+      if (right.degreeRank !== left.degreeRank) return right.degreeRank - left.degreeRank;
+      if (right.dateRank !== left.dateRank) return right.dateRank - left.dateRank;
+      return left.index - right.index;
+    });
+
+  return formatEducationSummary(ranked[0]?.entry);
+}
+
 function buildEducationItems(
   draft: PersistedWorkspaceDraft,
   resumeSections: ReturnType<typeof extractResumeSections>,
@@ -425,29 +461,7 @@ function buildResumeDataFromCalibratedResume(calibratedResume: CalibratedResumeP
   signals: ReturnType<typeof extractResumeSignals>;
   sections: ReturnType<typeof extractResumeSections>;
 } {
-  const sections: ReturnType<typeof extractResumeSections> = {
-    summary: calibratedResume.entries
-      .filter((entry) => entry.section === "summary")
-      .flatMap((entry) => {
-        const lines = [entry.title, ...(entry.bullets ?? [])].map((line) => cleanResumeLine(line)).filter(Boolean);
-        return lines;
-      }),
-    work: calibratedResume.entries
-      .filter((entry) => entry.section === "work")
-      .map((entry) => mapCalibratedEntryToParsedResumeEntry(entry, "work")),
-    education: calibratedResume.entries
-      .filter((entry) => entry.section === "education")
-      .flatMap((entry) => splitCalibratedEducationEntry(entry)),
-    projects: calibratedResume.entries
-      .filter((entry) => entry.section === "project")
-      .map((entry) => mapCalibratedEntryToParsedResumeEntry(entry, "project")),
-    skills: calibratedResume.entries
-      .filter((entry) => entry.section === "credential")
-      .flatMap((entry) => [entry.title, ...(entry.bullets ?? [])])
-      .map((line) => cleanResumeLine(line))
-      .filter(Boolean)
-  };
-
+  const sections = buildResumeSectionsFromCalibratedResume(calibratedResume);
   const personal = calibratedResume.personalInfo;
   const contacts = dedupeItems(
     [
@@ -475,6 +489,144 @@ function buildResumeDataFromCalibratedResume(calibratedResume: CalibratedResumeP
   };
 }
 
+function buildResumeSectionsFromCalibratedResume(calibratedResume: CalibratedResumeProfile) {
+  const sections: ReturnType<typeof extractResumeSections> = {
+    summary: calibratedResume.entries
+      .filter((entry) => entry.section === "summary")
+      .flatMap((entry) => {
+        const title = cleanResumeLine(entry.title);
+        const lines = [
+          isSummarySectionTitle(title) ? "" : title,
+          ...(entry.bullets ?? [])
+        ].map((line) => cleanResumeLine(line)).filter(Boolean);
+        return lines;
+      }),
+    work: calibratedResume.entries
+      .filter((entry) => entry.section === "work")
+      .map((entry) => mapCalibratedEntryToParsedResumeEntry(entry, "work")),
+    education: calibratedResume.entries
+      .filter((entry) => entry.section === "education")
+      .flatMap((entry) => splitCalibratedEducationEntry(entry)),
+    projects: calibratedResume.entries
+      .filter((entry) => entry.section === "project")
+      .map((entry) => mapCalibratedEntryToParsedResumeEntry(entry, "project")),
+    skills: calibratedResume.entries
+      .filter((entry) => entry.section === "credential" || entry.section === "supplement")
+      .flatMap((entry) => [entry.title, ...(entry.bullets ?? [])])
+      .map((line) => cleanResumeLine(line))
+      .filter(Boolean)
+  };
+
+  return repairLeakedWorkEntriesFromProjects({
+    ...sections,
+    work: dedupeParsedEntries(sections.work),
+    education: dedupeParsedEntries(sections.education),
+    projects: dedupeParsedEntries(sections.projects),
+    summary: dedupeItems(sections.summary).slice(0, 5),
+    skills: dedupeItems(sections.skills).slice(0, 3)
+  });
+}
+
+function repairLeakedWorkEntriesFromProjects(sections: ReturnType<typeof extractResumeSections>) {
+  const repairedProjects: ParsedResumeEntry[] = [];
+  const recoveredWork: ParsedResumeEntry[] = [];
+  const fallbackOrganization = inferLeakedWorkOrganization(sections.work);
+
+  for (const project of sections.projects) {
+    const nextProject: ParsedResumeEntry = {
+      ...project,
+      bullets: []
+    };
+    let activeLeakedWork: ParsedResumeEntry | null = null;
+    const bulletFragments = (project.bullets ?? []).flatMap((bullet) => splitExplicitBulletSeparators(bullet));
+
+    for (const fragment of bulletFragments) {
+      const leaked = extractLeakedWorkMarker(fragment);
+
+      if (leaked) {
+        const before = cleanDisplayLine(fragment.slice(0, leaked.index));
+        const after = cleanDisplayLine(fragment.slice(leaked.index + leaked.fullText.length));
+
+        if (before) {
+          nextProject.bullets?.push(before);
+        }
+
+        activeLeakedWork = {
+          heading: fallbackOrganization || "相关工作单位",
+          subheading: leaked.role,
+          meta: leaked.dateRange,
+          bullets: after ? [after] : []
+        };
+        continue;
+      }
+
+      if (activeLeakedWork) {
+        activeLeakedWork.bullets = [...(activeLeakedWork.bullets ?? []), fragment];
+      } else {
+        nextProject.bullets?.push(fragment);
+      }
+    }
+
+    if (activeLeakedWork) {
+      recoveredWork.push(activeLeakedWork);
+    }
+
+    nextProject.bullets = nextProject.bullets?.filter(Boolean);
+    repairedProjects.push(nextProject);
+  }
+
+  return {
+    ...sections,
+    work: dedupeParsedEntries([...sections.work, ...recoveredWork]),
+    projects: repairedProjects
+  };
+}
+
+function inferLeakedWorkOrganization(workEntries: ParsedResumeEntry[]) {
+  return workEntries.find((entry) => /银行|分行|公司|集团/u.test(entry.heading))?.heading ?? "";
+}
+
+function extractLeakedWorkMarker(fragment: string) {
+  const match = fragment.match(
+    /(综合运营岗（管培生）|综合运营岗|管培生)[（(]\s*((?:19|20)\d{2}(?:[./]\d{1,2})?\s*[-–—至到]\s*(?:(?:19|20)\d{2}(?:[./]\d{1,2})?|至今|现在))\s*[）)]/u
+  );
+
+  if (!match || match.index === undefined) {
+    return null;
+  }
+
+  return {
+    index: match.index,
+    fullText: match[0],
+    role: match[1],
+    dateRange: match[2].replace(/\s+/g, " ")
+  };
+}
+
+function deriveStrengthsFromResumeSections(resumeSections: ReturnType<typeof extractResumeSections>) {
+  const text = [
+    ...resumeSections.work.flatMap((entry) => [entry.heading, entry.subheading, ...(entry.bullets ?? [])]),
+    ...resumeSections.projects.flatMap((entry) => [entry.heading, entry.subheading, ...(entry.bullets ?? [])])
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const strengths: string[] = [];
+
+  if (/(AI|Agent|RAG|智能客服|智能助手|大模型|Prompt|MVP|PRD)/iu.test(text)) {
+    strengths.push("AI 产品落地经验：围绕智能客服、员工业务助手或投研辅助智能体等项目，完成需求定义、方案设计与结果验证。");
+  }
+
+  if (/(数据|分析|Tableau|SQL|Python|预算|指标|可视化|报表)/iu.test(text)) {
+    strengths.push("数据分析与业务理解：具备预算分析、业务数据处理或可视化经验，能把业务问题转化为可执行的产品和分析方案。");
+  }
+
+  if (/(银行|金融|反洗钱|AML|KYC|合规|客户|B\s*端|理财|信用卡)/iu.test(text)) {
+    strengths.push("金融业务与合规意识：覆盖运营、客户服务、反洗钱或 KYC 等场景，理解金融产品落地中的合规和质量要求。");
+  }
+
+  return strengths;
+}
+
 function mapCalibratedEntryToParsedResumeEntry(
   entry: CalibratedResumeEntry,
   section: "work" | "project" | "education"
@@ -487,25 +639,26 @@ function mapCalibratedEntryToParsedResumeEntry(
       .split(/[|｜\s]{2,}|[|｜]/)
       .map((part) => part.trim())
       .filter(Boolean);
-    const degree = educationParts.find((part) => isDegreeLike(part)) ?? educationParts[0] ?? "";
-    const major =
+    const parsedDegree = educationParts.find((part) => isDegreeLike(part)) ?? educationParts[0] ?? "";
+    const degree = (entry.role && isDegreeLike(entry.role) ? entry.role : "") || parsedDegree;
+    const parsedMajor =
       educationParts.find((part) => part !== degree && !isDateLikeText(part)) ??
       educationParts.find((part) => /专业|major|方向/i.test(part)) ??
       "";
-    const summary = entry.bullets.join(" ").trim();
+    const major =
+      (entry.organization && !isDegreeLike(entry.organization) && !isDateLikeText(entry.organization) ? entry.organization : "") ||
+      parsedMajor;
 
     return {
       heading: school || entry.title,
       subheading: [major, degree].filter(Boolean).join(" ｜ ") || undefined,
       meta: entry.dateRange,
-      summary: summary || undefined,
-      bullets: entry.bullets.length > 0 ? entry.bullets : undefined
     };
   }
 
   if (section === "project") {
     return {
-      heading: entry.title,
+      heading: entry.title.replace(/[（(][）)]/g, "").trim(),
       subheading: entry.organization || entry.role,
       meta: entry.dateRange,
       summary: undefined,
@@ -514,12 +667,16 @@ function mapCalibratedEntryToParsedResumeEntry(
   }
 
   return {
-    heading: entry.organization || entry.title,
+    heading: (entry.organization || entry.title).replace(/[（(][）)]/g, "").trim(),
     subheading: entry.role || undefined,
     meta: entry.dateRange,
     summary: undefined,
     bullets: entry.bullets.length > 0 ? entry.bullets : undefined
   };
+}
+
+function isSummarySectionTitle(value: string) {
+  return /^(个人优势|个人概述|自我评价|个人总结|核心优势|优势档案)$/u.test(value.trim());
 }
 
 function splitCalibratedEducationEntry(entry: CalibratedResumeEntry): ParsedResumeEntry[] {
@@ -546,15 +703,20 @@ function buildCertificatesAndSkills(
   return toTextItems(items.slice(0, 3));
 }
 
-function resolveTargetTitle(draft: PersistedWorkspaceDraft, jdText: string) {
+function resolveTargetTitle(draft: PersistedWorkspaceDraft, jdText: string, candidateName?: string) {
   const inferredTitle = inferTargetTitleFromJd(jdText);
   const currentTitle = draft.jobTitle.trim();
+  const normalizedCandidateName = (candidateName ?? "").replace(/\s+/g, "");
+
+  if (normalizedCandidateName && currentTitle.replace(/\s+/g, "") === normalizedCandidateName) {
+    return inferredTitle;
+  }
 
   if (inferredTitle && isLikelyDefaultOrMismatchedTitle(currentTitle, jdText)) {
     return inferredTitle;
   }
 
-  return currentTitle || inferredTitle || "目标岗位";
+  return currentTitle || inferredTitle || "";
 }
 
 async function readDraftJdText(draft: PersistedWorkspaceDraft) {
@@ -1209,6 +1371,30 @@ function isDegreeLike(value: string) {
   return /^(本科|硕士|博士|研究生|大专|MBA|EMBA|Bachelor|Master|PhD)$/i.test(value);
 }
 
+function extractEducationDegree(entry: ParsedResumeEntry | undefined) {
+  if (!entry) return "";
+  const source = [entry.subheading, entry.heading].filter(Boolean).join(" ｜ ");
+  return source
+    .split(/[|｜·\s]+/u)
+    .map((part) => part.trim())
+    .find((part) => isDegreeLike(part)) ?? "";
+}
+
+function getDegreeRank(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (/博士|phd/.test(normalized)) return 6;
+  if (/硕士|研究生|master|mba|emba/.test(normalized)) return 5;
+  if (/本科|bachelor/.test(normalized)) return 4;
+  if (/大专/.test(normalized)) return 3;
+  return 0;
+}
+
+function extractEducationEndYear(value: string | undefined) {
+  if (!value) return 0;
+  const years = value.match(/(?:19|20)\d{2}/g)?.map((year) => Number(year)) ?? [];
+  return years.length > 0 ? Math.max(...years) : 0;
+}
+
 function extractDateRange(line: string) {
   const match = line.match(
     /((?:19|20)\d{2}(?:[./]\d{1,2})?(?:\s*(?:-|–|—|~|至|到)\s*(?:(?:19|20)\d{2}(?:[./]\d{1,2})?|至今|现在))?)/i
@@ -1273,6 +1459,21 @@ function dedupeEntries(items: ParsedResumeEntry[]): ResumeDocumentEntryItem[] {
 
   for (const item of items) {
     const key = normalizeEntryHeadingKey(item.heading);
+    if (!map.has(key)) {
+      map.set(key, item);
+    }
+  }
+
+  return [...map.values()].map((item) => toEntryItem(item));
+}
+
+function dedupeResumeOnlyEntries(items: ParsedResumeEntry[]): ResumeDocumentEntryItem[] {
+  const map = new Map<string, ParsedResumeEntry>();
+
+  for (const item of items) {
+    const key = [item.heading, item.subheading ?? "", item.meta ?? "", item.summary ?? ""]
+      .join("::")
+      .replace(/\s+/g, "");
     if (!map.has(key)) {
       map.set(key, item);
     }
@@ -1353,6 +1554,26 @@ function compactEntryForOnePage(
       .filter(isNonEmptyString)
       .slice(0, maxBullets)
   };
+}
+
+function preserveOriginalEntryForResume(entry: ResumeDocumentEntryItem): ResumeDocumentEntryItem {
+  return {
+    ...entry,
+    heading: sanitizeHeading(entry.heading),
+    summary: cleanOriginalResumeText(entry.summary ?? "") || undefined,
+    bullets: (entry.bullets ?? [])
+      .map((bullet) => cleanOriginalResumeText(bullet))
+      .filter(isNonEmptyString)
+  };
+}
+
+function isResumeOnlyDraft(draft: PersistedWorkspaceDraft) {
+  return Boolean(
+    draft.calibratedResume &&
+    !draft.company.trim() &&
+    !draft.jdPreview.trim() &&
+    draft.suggestions.length === 0
+  );
 }
 
 function isNonEmptyString(value: string | undefined): value is string {
@@ -1444,8 +1665,8 @@ function dedupeParsedEntries(items: ParsedResumeEntry[]) {
 function toEntryItem(item: ParsedResumeEntry): ResumeDocumentEntryItem {
   const summary = item.summary ? cleanDisplayLine(item.summary) : undefined;
   const bullets = mergeBrokenBulletFragments([
-    ...(isDisplayableResumeLine(summary) ? [summary] : []),
-    ...(item.bullets?.map(cleanDisplayLine).filter(isDisplayableResumeLine) ?? [])
+    ...(isDisplayableResumeLine(summary) ? splitExplicitBulletSeparators(summary) : []),
+    ...(item.bullets?.flatMap((bullet) => splitExplicitBulletSeparators(bullet)).filter(isDisplayableResumeLine) ?? [])
   ]);
 
   return {
@@ -1581,16 +1802,30 @@ function deriveSuggestionEntryHeading(suggestion: SnapshotSuggestion) {
 }
 
 function splitIntoBullets(text: string) {
-  // Split only on explicit newlines and Chinese/English semicolons.
+  // Split on semicolons and meaningful newlines only.
   // Do NOT split on 。(Chinese period) — it is a sentence terminator within a bullet,
-  // not a delimiter between separate bullet points. Splitting on 。 causes each
-  // sub-clause of a run-on sentence to get its own bullet marker, which is wrong.
+  // not a delimiter between separate bullet points.
+  // For newlines: only split when the next line looks like a new bullet (starts with
+  // bullet markers, numbering, or is long enough to be a standalone point).
+  // Mid-sentence newlines (from OCR/AI formatting) are normalized to spaces.
+  const preprocessed = text.replace(/\n(?=[•·▪\-–—]\s)/g, "；")
+    .replace(/\n(?=\d+[.)]\s)/g, "；")
+    .replace(/\n(?=[一-龥]{4,})/g, "；")
+    .replace(/\s*[▸▶]\s*/gu, "；")
+    .replace(/\n/g, " ");
   return mergeBrokenBulletFragments(
-    text
-    .split(/[；;\n]/)
+    preprocessed
+    .split(/[；;]/)
     .map((part) => cleanDisplayLine(part))
     .filter((part) => part.length > 0)
   );
+}
+
+function splitExplicitBulletSeparators(value: string) {
+  return cleanDisplayLine(value)
+    .split(/\s*[▸▶]\s*/u)
+    .map((item) => cleanDisplayLine(item))
+    .filter(Boolean);
 }
 
 function appendLineToLastEntry(entries: ParsedResumeEntry[], line: string) {
@@ -1706,7 +1941,19 @@ function shouldMergeBulletFragments(previous: string, current: string) {
     return true;
   }
 
-  return /[、，,；;：:\/｜|（(【\[]$/.test(previousCompact);
+  // Merge if previous ends with a continuation punctuation
+  if (/[、，,；;：:\/｜|（(【\[]$/.test(previousCompact)) {
+    return true;
+  }
+
+  // Merge if previous doesn't end with sentence-terminal punctuation
+  // and current is a short fragment that looks like a broken sentence
+  const endsWithTerminal = /[。！？!?.]$/.test(previousCompact);
+  if (!endsWithTerminal && currentCompact.length < 15) {
+    return true;
+  }
+
+  return false;
 }
 
 function mergeBulletFragments(previous: string, current: string) {

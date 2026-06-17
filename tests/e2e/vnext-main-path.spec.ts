@@ -35,7 +35,7 @@ test.describe("vNext main path smoke test", () => {
     await expectNoNextErrors(page);
 
     await page.goto("/master");
-    await expect(page.getByRole("heading", { name: /把真实经历、洞察和可复用资料沉淀在这里。/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /长期资料/i })).toBeVisible();
     await expectNoNextErrors(page);
   });
 });

@@ -19,7 +19,7 @@ describe("calibrated draft chain", () => {
         originalFilename: "jd.txt"
       },
       resumeExtractedText: [
-        "吴世阳",
+        "示例候选人",
         "项目经历",
         "O\"erYou AI 岗位定制简历助手 2026.03 - 至今",
         "教育背景",
@@ -28,9 +28,9 @@ describe("calibrated draft chain", () => {
       calibratedResume: {
         status: "needs_review",
         personalInfo: {
-          name: "吴世阳",
-          phone: "18513449520",
-          email: "434995517@qq.com",
+          name: "示例候选人",
+          phone: "13800000000",
+          email: "candidate@example.com",
           github: "github.com/wsyoung",
           portfolio: "portfolio.link"
         },
@@ -89,7 +89,7 @@ describe("calibrated draft chain", () => {
 
     const document = await composeSnapshotDocument(persisted!);
 
-    expect(document.header.name).toBe("吴世阳");
+    expect(document.header.name).toBe("示例候选人");
     expect(document.header.meta.join(" ")).toContain("低置信字段");
     expect(JSON.stringify(document.sections.find((section) => section.id === "education")?.items)).toContain(
       "对外经济贸易大学"

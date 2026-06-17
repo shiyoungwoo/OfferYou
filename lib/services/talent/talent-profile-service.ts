@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { executeSql, querySql, sqlString } from "@/lib/db";
-import { buildTalentProfile, buildTalentProfileWithModel, type TalentProfile, type TalentPromptAnswers } from "@/lib/services/talent/talent-profile";
+import { executeSqlParams, querySqlParams } from "@/lib/db";
+import {
+  buildTalentProfile,
+  normalizeTalentExcavationTurns,
+  type TalentProfile,
+  type TalentPromptAnswers
+} from "@/lib/services/talent/talent-profile";
+import { buildTalentProfileWithModel } from "@/lib/services/talent/talent-profile-model";
 import {
   buildCareerNavigation,
   findCareerDirectionBySlug as findCareerDirectionBySlugFromProfile,
@@ -31,8 +37,59 @@ export type CareerNavigationRecord = {
   confirmedAt: string;
 };
 
+export type TalentExcavationDraftRecord = {
+  userId: string;
+  turns: NonNullable<TalentPromptAnswers["excavationTranscript"]>;
+  talentManual?: string;
+  profile?: TalentProfile;
+  updatedAt: string;
+};
+
 export function createTalentProfileDraft(answers: TalentPromptAnswers) {
   return buildTalentProfile(answers);
+}
+
+export async function getTalentExcavationDraft(userId: string): Promise<TalentExcavationDraftRecord | null> {
+  const rows = await querySqlParams<{ payload_json: string }>(
+    `SELECT payload_json
+     FROM talent_excavation_drafts
+     WHERE user_id = ?
+     LIMIT 1;`,
+    [userId]
+  );
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const parsed = parseJsonPayload<TalentExcavationDraftRecord>(rows[0].payload_json, "天赋挖掘草稿");
+  return parsed.ok ? parsed.value : null;
+}
+
+export async function saveTalentExcavationDraft(input: TalentExcavationDraftRecord): Promise<TalentExcavationDraftRecord> {
+  const record: TalentExcavationDraftRecord = {
+    ...input,
+    turns: normalizeTalentExcavationTurns(input.turns),
+    updatedAt: new Date().toISOString()
+  };
+
+  await executeSqlParams(
+    `INSERT INTO talent_excavation_drafts (user_id, payload_json, created_at, updated_at)
+     VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(user_id) DO UPDATE SET
+       payload_json = excluded.payload_json,
+       updated_at = CURRENT_TIMESTAMP;`,
+    [record.userId, JSON.stringify(record)]
+  );
+
+  return record;
+}
+
+export async function deleteTalentExcavationDraft(userId: string): Promise<void> {
+  await executeSqlParams(
+    `DELETE FROM talent_excavation_drafts WHERE user_id = ?;`,
+    [userId]
+  );
 }
 
 export async function confirmTalentProfile(input: {
@@ -40,10 +97,14 @@ export async function confirmTalentProfile(input: {
   answers: TalentPromptAnswers;
 }): Promise<TalentProfileRecord> {
   const confirmedAt = new Date().toISOString();
+  const answers: TalentPromptAnswers = {
+    ...input.answers,
+    excavationTranscript: normalizeTalentExcavationTurns(input.answers.excavationTranscript)
+  };
 
-  const modelResult = await buildTalentProfileWithModel(input.answers).catch(() => null);
+  const modelResult = await buildTalentProfileWithModel(answers).catch(() => null);
 
-  const profile = modelResult?.profile ?? buildTalentProfile(input.answers);
+  const profile = modelResult?.profile ?? buildTalentProfile(answers);
 
   const riskNotes = [
     ...(modelResult?.riskNotes ?? (modelResult ? [] : ["模型暂不可用，已使用规则生成天赋画像。"]))
@@ -53,7 +114,7 @@ export async function confirmTalentProfile(input: {
     id: `talent-${randomUUID()}`,
     userId: input.userId,
     status: "confirmed",
-    answers: input.answers,
+    answers,
     profile,
     generationMode: modelResult?.generationMode ?? "deterministic_fallback",
     riskNotes: riskNotes.length > 0 ? riskNotes : undefined,
@@ -77,30 +138,24 @@ export async function confirmTalentProfile(input: {
     }
   }
 
-  await executeSql(`
-    INSERT INTO talent_profiles (id, user_id, status, payload_json, confirmed_at, created_at, updated_at)
-    VALUES (
-      ${sqlString(record.id)},
-      ${sqlString(record.userId)},
-      ${sqlString(record.status)},
-      ${sqlString(JSON.stringify(record))},
-      ${sqlString(record.confirmedAt)},
-      CURRENT_TIMESTAMP,
-      CURRENT_TIMESTAMP
-    );
-  `);
+  await executeSqlParams(
+    `INSERT INTO talent_profiles (id, user_id, status, payload_json, confirmed_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+    [record.id, record.userId, record.status, JSON.stringify(record), record.confirmedAt]
+  );
 
   return record;
 }
 
 export async function getLatestConfirmedTalentProfile(userId: string): Promise<TalentProfileRecord | null> {
-  const rows = await querySql<{ payload_json: string }>(`
-    SELECT payload_json
-    FROM talent_profiles
-    WHERE user_id = ${sqlString(userId)} AND status = 'confirmed'
-    ORDER BY confirmed_at DESC, created_at DESC
-    LIMIT 1;
-  `);
+  const rows = await querySqlParams<{ payload_json: string }>(
+    `SELECT payload_json
+     FROM talent_profiles
+     WHERE user_id = ? AND status = 'confirmed'
+     ORDER BY confirmed_at DESC, created_at DESC
+     LIMIT 1;`,
+    [userId]
+  );
 
   if (rows.length === 0) {
     return null;
@@ -130,31 +185,24 @@ export async function confirmCareerNavigation(input: {
     confirmedAt
   };
 
-  await executeSql(`
-    INSERT INTO career_navigation_profiles (id, user_id, talent_profile_id, status, payload_json, confirmed_at, created_at, updated_at)
-    VALUES (
-      ${sqlString(record.id)},
-      ${sqlString(record.userId)},
-      ${sqlString(record.talentProfileId)},
-      ${sqlString(record.status)},
-      ${sqlString(JSON.stringify(record))},
-      ${sqlString(record.confirmedAt)},
-      CURRENT_TIMESTAMP,
-      CURRENT_TIMESTAMP
-    );
-  `);
+  await executeSqlParams(
+    `INSERT INTO career_navigation_profiles (id, user_id, talent_profile_id, status, payload_json, confirmed_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+    [record.id, record.userId, record.talentProfileId, record.status, JSON.stringify(record), record.confirmedAt]
+  );
 
   return record;
 }
 
 export async function getLatestConfirmedCareerNavigation(userId: string): Promise<CareerNavigationRecord | null> {
-  const rows = await querySql<{ payload_json: string }>(`
-    SELECT payload_json
-    FROM career_navigation_profiles
-    WHERE user_id = ${sqlString(userId)} AND status = 'confirmed'
-    ORDER BY confirmed_at DESC, created_at DESC
-    LIMIT 1;
-  `);
+  const rows = await querySqlParams<{ payload_json: string }>(
+    `SELECT payload_json
+     FROM career_navigation_profiles
+     WHERE user_id = ? AND status = 'confirmed'
+     ORDER BY confirmed_at DESC, created_at DESC
+     LIMIT 1;`,
+    [userId]
+  );
 
   if (rows.length === 0) {
     return null;
@@ -168,15 +216,16 @@ export async function getLatestConfirmedCareerNavigationForTalentProfile(
   userId: string,
   talentProfileId: string
 ): Promise<CareerNavigationRecord | null> {
-  const rows = await querySql<{ payload_json: string }>(`
-    SELECT payload_json
-    FROM career_navigation_profiles
-    WHERE user_id = ${sqlString(userId)}
-      AND talent_profile_id = ${sqlString(talentProfileId)}
-      AND status = 'confirmed'
-    ORDER BY confirmed_at DESC, created_at DESC
-    LIMIT 1;
-  `);
+  const rows = await querySqlParams<{ payload_json: string }>(
+    `SELECT payload_json
+     FROM career_navigation_profiles
+     WHERE user_id = ?
+       AND talent_profile_id = ?
+       AND status = 'confirmed'
+     ORDER BY confirmed_at DESC, created_at DESC
+     LIMIT 1;`,
+    [userId, talentProfileId]
+  );
 
   if (rows.length === 0) {
     return null;
@@ -194,12 +243,13 @@ export function findCareerDirectionBySlug(
 }
 
 async function getTalentProfileById(id: string): Promise<TalentProfileRecord | null> {
-  const rows = await querySql<{ payload_json: string }>(`
-    SELECT payload_json
-    FROM talent_profiles
-    WHERE id = ${sqlString(id)}
-    LIMIT 1;
-  `);
+  const rows = await querySqlParams<{ payload_json: string }>(
+    `SELECT payload_json
+     FROM talent_profiles
+     WHERE id = ?
+     LIMIT 1;`,
+    [id]
+  );
 
   if (rows.length === 0) {
     return null;

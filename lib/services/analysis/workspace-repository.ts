@@ -1,4 +1,5 @@
-import { executeSql, querySql, sqlString } from "@/lib/db";
+import { executeSqlParams, querySqlParams } from "@/lib/db";
+import type { ModelProviderKey } from "@/lib/ai/model-provider-config";
 import type { CalibratedResumeProfile } from "@/lib/services/calibration/resume-calibration-types";
 import type { GenerationMode, JDInsight, RewriteStrategy, RewriteVerification } from "@/lib/services/job-apply/agent-run";
 import { parseJsonPayload } from "@/lib/services/persistence/json-payload";
@@ -60,7 +61,7 @@ export type PersistedWorkspaceDraft = {
     sourceKind: "resume_baseline" | "master_fact" | "target_role_fit" | "revision";
     sourceLabel: string;
     generationMode?: GenerationMode;
-    modelProvider?: "gemini" | "openai_compatible" | "deterministic_fallback";
+    modelProvider?: ModelProviderKey;
     modelFallbackReason?: string;
     jdAbility?: string;
     factAnchors?: string[];
@@ -85,26 +86,23 @@ export type PersistedWorkspaceDraft = {
 };
 
 export async function saveWorkspaceDraft(draft: PersistedWorkspaceDraft) {
-  const payload = sqlString(JSON.stringify(draft));
-  const company = sqlString(draft.company);
-  const jobTitle = sqlString(draft.jobTitle);
-  const userId = sqlString(draft.userId);
-
-  await executeSql(`
-    INSERT INTO workspace_drafts (id, user_id, company, job_title, payload_json, created_at, updated_at)
-    VALUES (${sqlString(draft.id)}, ${userId}, ${company}, ${jobTitle}, ${payload}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    ON CONFLICT(id) DO UPDATE SET
-      user_id = excluded.user_id,
-      company = excluded.company,
-      job_title = excluded.job_title,
-      payload_json = excluded.payload_json,
-      updated_at = CURRENT_TIMESTAMP;
-  `);
+  await executeSqlParams(
+    `INSERT INTO workspace_drafts (id, user_id, company, job_title, payload_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(id) DO UPDATE SET
+       user_id = excluded.user_id,
+       company = excluded.company,
+       job_title = excluded.job_title,
+       payload_json = excluded.payload_json,
+       updated_at = CURRENT_TIMESTAMP;`,
+    [draft.id, draft.userId, draft.company, draft.jobTitle, JSON.stringify(draft)]
+  );
 }
 
 export async function readWorkspaceDraft(draftId: string): Promise<PersistedWorkspaceDraft | null> {
-  const rows = await querySql<{ payload_json: string }>(
-    `SELECT payload_json FROM workspace_drafts WHERE id = ${sqlString(draftId)} LIMIT 1;`
+  const rows = await querySqlParams<{ payload_json: string }>(
+    "SELECT payload_json FROM workspace_drafts WHERE id = ? LIMIT 1;",
+    [draftId]
   );
 
   if (rows.length === 0) {
@@ -116,7 +114,7 @@ export async function readWorkspaceDraft(draftId: string): Promise<PersistedWork
 }
 
 export async function listWorkspaceDrafts(): Promise<PersistedWorkspaceDraft[]> {
-  const rows = await querySql<{ payload_json: string }>(
+  const rows = await querySqlParams<{ payload_json: string }>(
     "SELECT payload_json FROM workspace_drafts ORDER BY updated_at DESC;"
   );
 

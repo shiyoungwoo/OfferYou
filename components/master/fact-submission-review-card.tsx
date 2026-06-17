@@ -37,18 +37,18 @@ export function FactSubmissionReviewCard({ submission }: FactSubmissionReviewCar
     <article className="rounded-[1.35rem] border border-line bg-paper p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-accent">Pending Fact Submission</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-accent">待确认事实提交</p>
           <h3 className="mt-2 text-lg font-semibold">{submission.id}</h3>
         </div>
         <span className="rounded-full border border-line bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-500">
-          {submission.status}
+          {submission.status === "pending_confirmation" ? "待确认" : submission.status === "confirmed" ? "已确认" : "已拒绝"}
         </span>
       </div>
 
       <p className="mt-4 text-sm leading-6 text-slate-700">{submission.submissionText}</p>
       <p className="mt-3 text-xs uppercase tracking-[0.22em] text-slate-500">
-        Source: {submission.sourceType}
-        {submission.relatedSuggestionId ? ` · Suggestion: ${submission.relatedSuggestionId}` : ""}
+        来源：{submission.sourceType}
+        {submission.relatedSuggestionId ? ` · 关联建议：${submission.relatedSuggestionId}` : ""}
       </p>
 
       <div className="mt-4 flex flex-wrap gap-3">
@@ -58,7 +58,7 @@ export function FactSubmissionReviewCard({ submission }: FactSubmissionReviewCar
           onClick={() => submitAction("confirm")}
           type="button"
         >
-          Confirm Into Master
+          {isPending ? "确认中…" : "确认纳入资料库"}
         </button>
         <button
           className="rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
@@ -66,7 +66,7 @@ export function FactSubmissionReviewCard({ submission }: FactSubmissionReviewCar
           onClick={() => submitAction("reject")}
           type="button"
         >
-          Reject
+          拒绝
         </button>
       </div>
     </article>

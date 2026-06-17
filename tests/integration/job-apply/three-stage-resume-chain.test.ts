@@ -66,9 +66,9 @@ describe("three-stage resume chain", () => {
     const calibratedResume = {
       status: "needs_review" as const,
       personalInfo: {
-        name: "吴世阳",
-        phone: "18513449520",
-        email: "434995517@qq.com"
+        name: "示例候选人",
+        phone: "13800000000",
+        email: "candidate@example.com"
       },
       entries: [
         {
@@ -131,7 +131,7 @@ describe("three-stage resume chain", () => {
         originalFilename: "jd.txt"
       },
       resumeExtractedText: [
-        "吴世阳",
+        "示例候选人",
         "项目经历",
         "O\"erYou AI 岗位定制简历助手 2026.03 - 至今",
         "教育背景",

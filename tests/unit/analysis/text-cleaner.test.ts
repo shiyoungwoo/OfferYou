@@ -18,7 +18,7 @@ describe("text-cleaner", () => {
     expect(
       normalizeOcrResumeText(
         [
-          "2026/3/11 00:26吴世阳 - AI产品经理简历",
+          "2026/3/11 00:26示例候选人 - AI产品经理简历",
           "第2/2页file:///tmp/resume-ai-pm.html",
           "运用 Excel 和 Tableau 搭建自动化预算分析模板"
         ].join("\n")

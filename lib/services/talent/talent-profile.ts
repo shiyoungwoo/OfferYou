@@ -1,4 +1,9 @@
-import { callModelJSON } from "@/lib/ai/model-gateway";
+export type TalentExcavationTurn = {
+  question: string;
+  answer: string;
+  reflection?: string;
+  requiredAnchor?: "early_memory" | "unconscious_competence" | "energy_audit" | "jealousy_signal" | "follow_up";
+};
 
 export type TalentPromptAnswers = {
   discoveryMode?: "radar" | "deep";
@@ -13,6 +18,8 @@ export type TalentPromptAnswers = {
   energyRecharge?: string;
   jealousyDecode?: string;
   followUpNotes?: string;
+  excavationTranscript?: TalentExcavationTurn[];
+  talentManual?: string;
 };
 
 export type TalentSignal = {
@@ -30,6 +37,7 @@ export type TalentProfile = {
   suitableDirections: string[];
   cautionNotes: string[];
   confidenceNote: string;
+  talentManual?: string;
 };
 
 export type TalentProfileGenerationResult = {
@@ -38,6 +46,35 @@ export type TalentProfileGenerationResult = {
   riskNotes?: string[];
   modelProvider?: string;
 };
+
+export function normalizeTalentExcavationTurns(turns: TalentExcavationTurn[] = []): TalentExcavationTurn[] {
+  const seen = new Set<string>();
+  const normalized: TalentExcavationTurn[] = [];
+
+  for (const turn of turns) {
+    const question = turn.question.trim();
+    const answer = turn.answer.trim();
+
+    if (!question || !answer) {
+      continue;
+    }
+
+    const key = `${compactForDedupe(question)}::${compactForDedupe(answer)}`;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    normalized.push({
+      question,
+      answer,
+      reflection: turn.reflection?.trim() || undefined,
+      requiredAnchor: turn.requiredAnchor
+    });
+  }
+
+  return normalized;
+}
 
 const signalCatalog = [
   {
@@ -187,6 +224,10 @@ const directionCatalog = [
 
 function normalize(text: string) {
   return text.trim().toLowerCase();
+}
+
+function compactForDedupe(text: string) {
+  return text.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function excerpt(text: string) {
@@ -381,75 +422,9 @@ export function buildTalentProfile(answers: TalentPromptAnswers): TalentProfile 
   };
 }
 
-type ModelTalentProfileOutput = {
-  headline: string;
-  summary: string;
-  signals: Array<{
-    key: string;
-    label: string;
-    description: string;
-    evidence: string[];
-  }>;
-  workStyle: string[];
-  suitableDirections: string[];
-  cautionNotes: string[];
-  confidenceNote: string;
-};
-
-export async function buildTalentProfileWithModel(answers: TalentPromptAnswers): Promise<TalentProfileGenerationResult> {
-  const answerEntries = listAnswerEntries(answers);
-
-  const systemPrompt = [
-    "你是一位资深职业教练。根据候选人的真实回答，生成天赋优势画像。",
-    "",
-    "规则：",
-    "- 只能基于候选人提供的回答内容，不编造经历或成就。",
-    "- 识别 3 到 5 条个人优势信号，每条需有证据。",
-    "- 每条信号用一个英文 key 标识（如 clarity_builder、ownership_runner）。",
-    "- 输出合法 JSON，不要 Markdown。"
-  ].join("\n");
-
-  const userPrompt = [
-    "候选人回答：",
-    ...answerEntries.map((entry, i) => `${i + 1}. ${entry}`),
-    "",
-    `请输出 JSON：{ "headline": string, "summary": string, "signals": Array<{ "key": string, "label": string, "description": string, "evidence": string[] }>, "workStyle": string[], "suitableDirections": string[], "cautionNotes": string[], "confidenceNote": string }`
-  ].join("\n");
-
-  const result = await callModelJSON<ModelTalentProfileOutput>({
-    systemPrompt,
-    userPrompt,
-    task: "talent"
-  });
-
-  if (!result.data?.headline || !result.data.signals?.length) {
-    throw new Error("Model returned empty talent profile.");
-  }
-
-  const profile: TalentProfile = {
-    headline: result.data.headline,
-    summary: result.data.summary ?? "",
-    signals: result.data.signals.slice(0, 5).map((s) => ({
-      key: s.key,
-      label: s.label,
-      description: s.description ?? "",
-      evidence: (s.evidence ?? []).map(excerpt)
-    })),
-    workStyle: result.data.workStyle ?? [],
-    suitableDirections: result.data.suitableDirections ?? [],
-    cautionNotes: result.data.cautionNotes ?? [],
-    confidenceNote: result.data.confidenceNote ?? ""
-  };
-
-  return {
-    profile,
-    generationMode: result.generationMode as TalentProfileGenerationResult["generationMode"],
-    riskNotes: result.fallbackReason ? [result.fallbackReason] : undefined,
-    modelProvider: result.provider
-  };
-}
-
 function listAnswerEntries(answers: TalentPromptAnswers) {
+  const excavationTranscript = normalizeTalentExcavationTurns(answers.excavationTranscript);
+
   return [
     answers.proudMoment,
     answers.trustedProblem,
@@ -461,8 +436,21 @@ function listAnswerEntries(answers: TalentPromptAnswers) {
     answers.adultUnconsciousCompetence,
     answers.energyRecharge,
     answers.jealousyDecode,
-    answers.followUpNotes
+    answers.followUpNotes,
+    ...excavationTranscript.map((turn) => [
+      turn.question,
+      turn.answer,
+      turn.reflection
+    ].filter(Boolean).join("\n"))
   ].filter((value): value is string => Boolean(value?.trim()));
+}
+
+export function listTalentAnswerEntries(answers: TalentPromptAnswers) {
+  return listAnswerEntries(answers);
+}
+
+export function excerptTalentEvidence(text: string) {
+  return excerpt(text);
 }
 
 function firstAvailable(...values: Array<string | undefined>) {

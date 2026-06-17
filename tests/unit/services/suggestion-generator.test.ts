@@ -110,7 +110,7 @@ describe("generateSeedSuggestions", () => {
       calibratedResume: {
         status: "confirmed",
         personalInfo: {
-          name: "吴世阳"
+          name: "示例候选人"
         },
         entries: [
           {
@@ -161,7 +161,7 @@ describe("generateSeedSuggestions", () => {
       calibratedResume: {
         status: "confirmed",
         personalInfo: {
-          name: "吴世阳"
+          name: "示例候选人"
         },
         entries: [
           {
@@ -280,7 +280,7 @@ describe("generateSeedSuggestions", () => {
         jdText: "招聘 AI 产品经理，要求 AI 产品设计、工作流设计、内容运营与传播。",
         calibratedResume: {
           status: "confirmed",
-          personalInfo: { name: "吴世阳" },
+          personalInfo: { name: "示例候选人" },
           entries: [
             {
               id: "project-1",
@@ -344,7 +344,7 @@ describe("generateSeedSuggestions", () => {
         jdText: "招聘 AI 产品经理，要求 AI 产品设计和工作流设计。",
         calibratedResume: {
           status: "confirmed",
-          personalInfo: { name: "吴世阳" },
+          personalInfo: { name: "示例候选人" },
           entries: [
             {
               id: "project-1",
@@ -403,7 +403,7 @@ describe("generateSeedSuggestions", () => {
         jdText: "招聘 AI 产品经理。",
         calibratedResume: {
           status: "confirmed",
-          personalInfo: { name: "吴世阳" },
+          personalInfo: { name: "示例候选人" },
           entries: [
             {
               id: "edu-1",

@@ -22,7 +22,7 @@
 
 - JD 文本长度：767 字符。
 - PDF 解析长度：1090 字符，耗时 120 ms。
-- PDF 解析片段：吴世阳 AI 产品经理 手机：18513449520邮箱：434995517@qq.com 学历：对外经济贸易大学 | 硕士英语：CET-6 个人优势 AI 产品与 Prompt 应用：独立设计并推进 AI 求职辅助产品 OfferYou MVP，完成核心流程定义、RESTful API 接口草案及前端状态 机设计，产品理念与生成式 AI 应用高度契合 产品需求拆解与数据分析：具备数学与经济学背景，熟练运用 Excel、Tableau、
+- PDF 解析片段：示例候选人 AI 产品经理 手机：13800000000邮箱：candidate@example.com 学历：对外经济贸易大学 | 硕士英语：CET-6 个人优势 AI 产品与 Prompt 应用：独立设计并推进 AI 求职辅助产品 OfferYou MVP，完成核心流程定义、RESTful API 接口草案及前端状态 机设计，产品理念与生成式 AI 应用高度契合 产品需求拆解与数据分析：具备数学与经济学背景，熟练运用 Excel、Tableau、
 
 ## 3. 链路结果
 
@@ -56,8 +56,8 @@
 - Snapshot templateKey：professional-cn
 - Section 数量：5
 - 页数估算：1
-- 标题样例：手机：18513449520
-邮箱：434995517@qq.com ｜ 求职意向：AI 产品经理 Vibe Coding
+- 标题样例：手机：13800000000
+邮箱：candidate@example.com ｜ 求职意向：AI 产品经理 Vibe Coding
 学历：对外经济贸易大学 · 硕士
 AI 产品与 Prompt 应用：独立设计并推进 AI 求职辅助产品 OfferYou MVP，完成核心流程定义、RESTful API 接口草案及前端状态机设计，产品理念与生成式 AI 应用高度契合
 产品需求拆解与数据分析：具备数学与经济学背景，熟练运用 Excel、Tableau、R 等工具进行数据建模与分析，能以数据驱动产品迭代与业务决策
@@ -66,15 +66,15 @@ B 端沟通与方案表达：3 年银行一线经验，积累了面向中铁、�
 ### PDF
 
 - professional-cn
-  - 路径：/Users/wsyoung/Projects/OfferYou/github_release/docs/quality/offeryou-self-use-goal-artifacts/professional-cn-595efff8-0361-4218-a23b-d6e944c93f58-吴世阳-AI 产品经理 Vibe Coding-可投递版-20260508.pdf
+  - 路径：/Users/wsyoung/Projects/OfferYou/github_release/docs/quality/offeryou-self-use-goal-artifacts/professional-cn-595efff8-0361-4218-a23b-d6e944c93f58-示例候选人-AI 产品经理 Vibe Coding-可投递版-20260508.pdf
   - 大小：480490 bytes
   - PDF 文本提取长度：1131
-  - PDF 文本片段：吴世阳 手机：18513449520|邮箱：434995517@qq.com | 学历：对外经济贸易大学 | 硕士 求职意向：AI 产品经理 Vibe Coding 个人优势 工作经历 广发银行北京分行 | 综合柜员岗2022.08-2025.08 流程优化与数据分析：协助进行运营数据统计与分析，为人员排班与窗口调整提供数据支撑；梳理并优化对公业务办理流程，提 升业务办理效率。 B 端客户服务：面向中铁、中国物流集团等 B 端客户提供产品讲解与方案推介，完成信用卡有效指标 40-50 张、季度有效户 10 户，积累
+  - PDF 文本片段：示例候选人 手机：13800000000|邮箱：candidate@example.com | 学历：对外经济贸易大学 | 硕士 求职意向：AI 产品经理 Vibe Coding 个人优势 工作经历 广发银行北京分行 | 综合柜员岗2022.08-2025.08 流程优化与数据分析：协助进行运营数据统计与分析，为人员排班与窗口调整提供数据支撑；梳理并优化对公业务办理流程，提 升业务办理效率。 B 端客户服务：面向中铁、中国物流集团等 B 端客户提供产品讲解与方案推介，完成信用卡有效指标 40-50 张、季度有效户 10 户，积累
 - ats-clean
-  - 路径：/Users/wsyoung/Projects/OfferYou/github_release/docs/quality/offeryou-self-use-goal-artifacts/ats-clean-e9c76eca-8d7a-4806-8c3b-bb4eff4880c1-吴世阳-AI 产品经理 Vibe Coding-可投递版-20260508.pdf
+  - 路径：/Users/wsyoung/Projects/OfferYou/github_release/docs/quality/offeryou-self-use-goal-artifacts/ats-clean-e9c76eca-8d7a-4806-8c3b-bb4eff4880c1-示例候选人-AI 产品经理 Vibe Coding-可投递版-20260508.pdf
   - 大小：437528 bytes
   - PDF 文本提取长度：1121
-  - PDF 文本片段：吴世阳 AI 产品经理 Vibe Coding 手机：18513449520邮箱：434995517@qq.com 学历：对外经济贸易大学 | 硕士 个人优势 AI 产品与 Prompt 应用：独立设计并推进 AI 求职辅助产品 OfferYou MVP，完成核心流程定义、RESTful API 接口草案及前端状态 机设计，产品理念与生成式 AI 应用高度契合 产品需求拆解与数据分析：具备数学与经济学背景，熟练运用 Excel、Tableau、R 等工具进行数据建模与分析，能以数据驱动产品 迭代与业务决策 B 端沟
+  - PDF 文本片段：示例候选人 AI 产品经理 Vibe Coding 手机：13800000000邮箱：candidate@example.com 学历：对外经济贸易大学 | 硕士 个人优势 AI 产品与 Prompt 应用：独立设计并推进 AI 求职辅助产品 OfferYou MVP，完成核心流程定义、RESTful API 接口草案及前端状态 机设计，产品理念与生成式 AI 应用高度契合 产品需求拆解与数据分析：具备数学与经济学背景，熟练运用 Excel、Tableau、R 等工具进行数据建模与分析，能以数据驱动产品 迭代与业务决策 B 端沟
 
 ### 面试准备
 

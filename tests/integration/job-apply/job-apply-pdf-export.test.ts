@@ -7,7 +7,7 @@ import { confirmCareerNavigation, confirmTalentProfile } from "@/lib/services/ta
 import { createDraft } from "@/lib/services/ingestion/create-draft";
 import { generateSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
 import { exportResumeDocumentForDraft } from "@/lib/services/export/resume-export-service";
-import { readApplicationRecord } from "@/lib/services/applications/application-record-service";
+import { listApplicationRecords } from "@/lib/services/applications/application-record-service";
 import { jobApplyCases } from "@/tests/fixtures/job-apply/cases";
 import { readFile } from "node:fs/promises";
 
@@ -69,14 +69,14 @@ describe("job-apply pdf export fixtures", () => {
 
       await generateSnapshotForDraft(draft.id);
       const result = await exportResumeDocumentForDraft({ draftId: draft.id });
-      const record = await readApplicationRecord(result.recordId);
+      const records = await listApplicationRecords();
       const pdfStat = await stat(result.storagePath);
       const safeTitle = sample.jobTitle.replace(/[\/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim();
       const expectedName = resumeContent.split(/\r?\n/).find((line) => line.trim())?.trim() ?? "OfferYou 用户";
 
       expect(result.storagePath.endsWith(".pdf")).toBe(true);
       expect(pdfStat.size).toBeGreaterThan(100);
-      expect(record?.exportStoragePath).toBe(result.storagePath);
+      expect(records).toHaveLength(0);
       expect(path.basename(result.storagePath)).toContain(expectedName);
       expect(path.basename(result.storagePath)).toContain(safeTitle);
       expect(path.basename(result.storagePath)).toContain("可投递版");

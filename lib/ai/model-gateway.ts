@@ -1,6 +1,8 @@
 import { callGemini } from "@/lib/ai/gemini-client";
 import { callOpenAICompatible, hasOpenAICompatibleConfig } from "@/lib/ai/openai-compatible-client";
-import { resolveOpenAICompatibleModelConfig } from "@/lib/ai/model-routing";
+import { callAntigravityCli } from "@/lib/ai/cli/antigravity-cli-client";
+import { callCodexCli } from "@/lib/ai/cli/codex-cli-client";
+import { getModelReasoningTierForTask, resolveGeminiModelConfig, resolveOpenAICompatibleModelConfig } from "@/lib/ai/model-routing";
 import { extractFirstJsonValue, parseLooseJSON as parseLooseJSONRaw, stripMarkdown } from "@/lib/ai/json-parser";
 import {
   getAvailableModelProviders as getConfiguredModelProviders,
@@ -278,7 +280,26 @@ async function callProviderText(
     return callOpenAICompatible(options);
   }
 
-  return callGemini(options);
+  if (provider === "antigravity_cli") {
+    return callAntigravityCli({
+      systemPrompt: options.systemPrompt,
+      userPrompt: options.userPrompt,
+      jsonMode: options.jsonMode,
+    });
+  }
+
+  if (provider === "codex_cli") {
+    return callCodexCli({
+      systemPrompt: options.systemPrompt,
+      userPrompt: options.userPrompt,
+      jsonMode: options.jsonMode,
+    });
+  }
+
+  return callGemini({
+    ...options,
+    tier: getModelReasoningTierForTask(options.task),
+  });
 }
 
 async function repairProviderJSON<T>(
@@ -333,7 +354,7 @@ function buildProviderTrace(input: {
 
 function getConfiguredModelName(provider: ModelProviderKey, task?: ModelTaskKey) {
   if (provider === "gemini") {
-    return process.env.GEMINI_MODEL || "gemini-1.5-flash";
+    return resolveGeminiModelConfig(task)?.model ?? "gemini-2.5-flash";
   }
 
   if (provider === "openai_compatible") {
@@ -373,11 +394,12 @@ function getJsonParseFallbackReason(provider: ModelProviderKey) {
 
 function formatModelFailureReason(provider: ModelProviderKey, error: unknown) {
   const detail = summarizeModelError(error);
+  const label = getProviderDisplayName(provider);
 
-  if (provider === "openai_compatible") {
+  if (provider === "openai_compatible" || provider === "antigravity_cli" || provider === "codex_cli") {
     return detail
-      ? `${getProviderDisplayName(provider)} 调用失败，已切换到确定性回退。${detail}`
-      : `${getProviderDisplayName(provider)} 调用失败，已切换到确定性回退。请稍后重试。`;
+      ? `${label} 调用失败，已切换到确定性回退。${detail}`
+      : `${label} 调用失败，已切换到确定性回退。请稍后重试。`;
   }
 
   return detail

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildTalentProfile, buildTalentProfileWithModel } from "@/lib/services/talent/talent-profile";
+import { buildTalentProfile } from "@/lib/services/talent/talent-profile";
+import { buildTalentProfileWithModel } from "@/lib/services/talent/talent-profile-model";
 
 vi.mock("@/lib/ai/model-gateway", () => ({
   callModelJSON: vi.fn()
@@ -50,7 +51,8 @@ describe("buildTalentProfile", () => {
         workStyle: ["需要自主空间"],
         suitableDirections: ["运营、项目推进类方向"],
         cautionNotes: ["继续保持验证"],
-        confidenceNote: "当前可信度为中等。"
+        confidenceNote: "当前可信度为中等。",
+        talentManual: "这是一份模型生成的个人天赋使用说明书。"
       },
       generationMode: "model"
     });
@@ -61,6 +63,7 @@ describe("buildTalentProfile", () => {
 
     expect(result.profile.headline).toContain("结构化梳理者");
     expect(result.profile.signals).toHaveLength(1);
+    expect(result.profile.talentManual).toContain("天赋使用说明书");
     expect(result.generationMode).toBe("model");
     expect(result.modelProvider).toBe("openai_compatible");
     expect(result.riskNotes).toBeUndefined();

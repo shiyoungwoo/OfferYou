@@ -20,7 +20,7 @@ export default async function RecordPage({ params }: RecordPageProps) {
         ) : (
           <section className="rounded-[1.75rem] border border-dashed border-line bg-white/85 p-6 shadow-card">
             <p className="text-sm leading-7 text-slate-700">
-              No application record exists for this draft yet. Export the PDF first to finalize the record.
+              该草稿还没有投递记录。请先导出 PDF 以生成投递记录。
             </p>
           </section>
         )}

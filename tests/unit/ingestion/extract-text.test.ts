@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractTextFromUploadedBuffer } from "@/lib/services/ingestion/extract-text";
+import { buildParseHardSignals, extractTextFromUploadedBuffer } from "@/lib/services/ingestion/extract-text";
 
 describe("extractTextFromUploadedBuffer", () => {
   it("extracts plain text uploads fully", async () => {
@@ -23,5 +23,33 @@ describe("extractTextFromUploadedBuffer", () => {
     expect(result.extractedText).toContain("Customer Success Lead");
     expect(result.extractedText).toContain("Workflow coordination");
     expect(result.extractionState).toBe("partial_text");
+  });
+
+  it("does not use missing resume sections as a hard rejection signal", () => {
+    const signals = buildParseHardSignals({
+      engine: "liteparse",
+      text: [
+        "示例候选人",
+        "13800000000",
+        "candidate@example.com",
+        "项目经历",
+        "OfferYou AI 求职助手 2026.03 - 至今",
+        "独立完成 AI 简历优化工作流设计，并验证 PDF 导出和面试准备链路。"
+      ].join("\n")
+    });
+
+    expect(signals.detectedSections).toContain("personal_info");
+    expect(signals.detectedSections).toContain("project");
+    expect(signals.missingCriticalSections).toContain("education");
+    expect(signals.mustReject).toBe(false);
+  });
+
+  it("hard-rejects empty or unreadable extraction before AI review", () => {
+    const signals = buildParseHardSignals({
+      engine: "liteparse",
+      text: "������"
+    });
+
+    expect(signals.mustReject).toBe(true);
   });
 });

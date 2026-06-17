@@ -1,4 +1,5 @@
 .next
+out
 node_modules
 coverage
 playwright-report
@@ -6,12 +7,22 @@ test-results
 *.log
 *.sqlite
 *.sqlite-journal
+*.db
+*.db-journal
 .env
 .env.local
+.env.*.local
 prisma/dev.db
 prisma/dev.db-journal
 /storage
 tsconfig.tsbuildinfo
+*.tsbuildinfo
+.DS_Store
+.DS_Store?
+.claude/
 /docs/quality/job-apply-fixture-artifacts/
 /docs/quality/offeryou-real-trial-artifacts/
 /docs/quality/offeryou-self-use-goal-artifacts/
+
+# Tauri
+src-tauri/target/

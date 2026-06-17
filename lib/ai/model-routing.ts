@@ -1,4 +1,6 @@
 import type { ModelTaskKey } from "@/lib/ai/model-task-config";
+import { getAntigravityModelForTier } from "@/lib/ai/cli/antigravity-cli-client";
+import { getCodexModelForTier } from "@/lib/ai/cli/codex-cli-client";
 
 export type ModelReasoningTier = "simple" | "complex" | "vision";
 
@@ -13,17 +15,30 @@ export type RoutedModelConfig = {
   authMode: "api_key" | "oauth";
 };
 
+export type GeminiModelConfig = {
+  apiKey: string;
+  model: string;
+  tier: ModelReasoningTier;
+};
+
 const COMPLEX_TASKS = new Set<ModelTaskKey>([
   "jd_analysis",
   "rewrite",
   "talent",
-  "interview",
+  "interview"
+]);
+
+const VISION_TASKS = new Set<ModelTaskKey>([
   "resume_calibration"
 ]);
 
 export function getModelReasoningTierForTask(task?: ModelTaskKey): ModelReasoningTier {
   if (!task) {
     return "simple";
+  }
+
+  if (VISION_TASKS.has(task)) {
+    return "vision";
   }
 
   return COMPLEX_TASKS.has(task) ? "complex" : "simple";
@@ -149,4 +164,45 @@ function normalizeFlavor(value: string | undefined): OpenAICompatibleFlavor | un
   }
 
   return undefined;
+}
+
+export function resolveGeminiModelConfig(task?: ModelTaskKey): GeminiModelConfig | null {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+
+  const tier = getModelReasoningTierForTask(task);
+
+  return {
+    apiKey,
+    model: getGeminiModelForTier(tier),
+    tier,
+  };
+}
+
+export function hasResolvedGeminiConfig(): boolean {
+  return Boolean(process.env.GEMINI_API_KEY);
+}
+
+export function resolveAntigravityCliModel(task?: ModelTaskKey): string {
+  const tier = getModelReasoningTierForTask(task);
+  return getAntigravityModelForTier(tier);
+}
+
+export function resolveCodexCliModel(task?: ModelTaskKey): string {
+  const tier = getModelReasoningTierForTask(task);
+  return getCodexModelForTier(tier === "vision" ? "simple" : tier);
+}
+
+function getGeminiModelForTier(tier: ModelReasoningTier): string {
+  if (tier === "vision") {
+    return process.env.GEMINI_MODEL_VISION ?? "gemini-3.5-flash";
+  }
+
+  if (tier === "complex") {
+    return process.env.GEMINI_MODEL_COMPLEX ?? "gemini-3.1-pro";
+  }
+
+  return process.env.GEMINI_MODEL_SIMPLE ?? process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
 }

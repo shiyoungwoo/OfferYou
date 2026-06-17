@@ -3,6 +3,7 @@ import {
   getDefaultMimoModelForTier,
   getDefaultOpenAICodexModelForTier,
   getModelReasoningTierForTask,
+  resolveGeminiModelConfig,
   resolveOpenAICompatibleModelConfig
 } from "@/lib/ai/model-routing";
 
@@ -20,12 +21,18 @@ describe("model-routing", () => {
     delete process.env.OPENAI_CODEX_MODEL_SIMPLE;
     delete process.env.OPENAI_CODEX_MODEL_COMPLEX;
     delete process.env.OPENAI_COMPATIBLE_FLAVOR;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_MODEL;
+    delete process.env.GEMINI_MODEL_SIMPLE;
+    delete process.env.GEMINI_MODEL_COMPLEX;
+    delete process.env.GEMINI_MODEL_VISION;
   });
 
   it("routes complex OfferYou tasks to stronger models", () => {
     expect(getModelReasoningTierForTask("jd_analysis")).toBe("complex");
     expect(getModelReasoningTierForTask("rewrite")).toBe("complex");
     expect(getModelReasoningTierForTask("interview")).toBe("complex");
+    expect(getModelReasoningTierForTask("resume_calibration")).toBe("vision");
     expect(getModelReasoningTierForTask("gap_analysis")).toBe("simple");
   });
 
@@ -53,6 +60,11 @@ describe("model-routing", () => {
       model: "mimo-v2.5-pro",
       tier: "complex"
     });
+    expect(resolveOpenAICompatibleModelConfig("resume_calibration")).toMatchObject({
+      flavor: "mimo",
+      model: "mimo-v2.5",
+      tier: "vision"
+    });
   });
 
   it("can prefer OpenAI Codex OAuth when explicitly requested", () => {
@@ -68,6 +80,47 @@ describe("model-routing", () => {
       authMode: "oauth",
       flavor: "openai_codex",
       model: "gpt-5.5"
+    });
+  });
+
+  it("returns null for Gemini config when GEMINI_API_KEY is not set", () => {
+    delete process.env.GEMINI_API_KEY;
+    expect(resolveGeminiModelConfig()).toBeNull();
+  });
+
+  it("resolves Gemini model per task with tiered defaults", () => {
+    process.env.GEMINI_API_KEY = "test-key";
+
+    expect(resolveGeminiModelConfig("gap_analysis")).toMatchObject({
+      model: "gemini-3.5-flash",
+      tier: "simple"
+    });
+    expect(resolveGeminiModelConfig("rewrite")).toMatchObject({
+      model: "gemini-3.1-pro",
+      tier: "complex"
+    });
+    expect(resolveGeminiModelConfig("jd_analysis")).toMatchObject({
+      model: "gemini-3.1-pro",
+      tier: "complex"
+    });
+    expect(resolveGeminiModelConfig("resume_calibration")).toMatchObject({
+      model: "gemini-3.5-flash",
+      tier: "vision"
+    });
+  });
+
+  it("allows overriding Gemini models via env vars", () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    process.env.GEMINI_MODEL_SIMPLE = "gemini-2.0-flash";
+    process.env.GEMINI_MODEL_COMPLEX = "gemini-2.5-pro-preview";
+
+    expect(resolveGeminiModelConfig("gap_analysis")).toMatchObject({
+      model: "gemini-2.0-flash",
+      tier: "simple"
+    });
+    expect(resolveGeminiModelConfig("rewrite")).toMatchObject({
+      model: "gemini-2.5-pro-preview",
+      tier: "complex"
     });
   });
 });

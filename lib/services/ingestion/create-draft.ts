@@ -1,5 +1,5 @@
-import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { getStorageRoot } from "@/lib/runtime/storage-root";
 import { analyzeDraft } from "@/lib/services/analysis/gap-analysis-service";
 import { calibrateResumeStructure } from "@/lib/services/calibration/resume-calibration-service";
 import { saveWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
@@ -15,7 +15,7 @@ import {
 import { LocalStorageAdapter } from "@/lib/storage/local-storage-adapter";
 import type { CreateDraftInput } from "@/lib/validation/drafts";
 
-const storageAdapter = new LocalStorageAdapter(path.join(process.cwd(), "storage"));
+function getStorageAdapter() { return new LocalStorageAdapter(getStorageRoot()); }
 
 export async function createDraft(input: CreateDraftInput): Promise<PersistedWorkspaceDraft> {
   const { userId } = getDefaultUserContext();
@@ -39,7 +39,7 @@ export async function createDraft(input: CreateDraftInput): Promise<PersistedWor
 
   const draftId = randomUUID();
 
-  const jdAsset = await storageAdapter.put({
+  const jdAsset = await getStorageAdapter().put({
     userId,
     kind: "jd_source",
     filename: `${input.company}-${input.jobTitle}-${draftId}.txt`,

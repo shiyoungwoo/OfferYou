@@ -41,6 +41,37 @@ describe("TemplateProfessionalCN", () => {
     expect(screen.getByText("OfferYou")).toBeTruthy();
   });
 
+  it("keeps Professional CN text bullets and bolds labels containing 0→1", () => {
+    const { container } = render(
+      <TemplateProfessionalCN
+        document={{
+          templateKey: "professional-cn",
+          header: {
+            name: "User",
+            title: "AI Product Manager",
+            meta: []
+          },
+          sections: [
+            {
+              id: "personal-strengths",
+              title: "个人优势",
+              items: [
+                {
+                  type: "text",
+                  text: "产品 0→1 落地经验：参与 AI 智能助手从需求洞察到上线反馈。"
+                }
+              ],
+              tone: "standard"
+            }
+          ]
+        }}
+      />
+    );
+
+    expect(screen.getByText("产品 0→1 落地经验：")).toBeTruthy();
+    expect(container.querySelector(".text-item")?.getAttribute("class")).toContain("before:bg-[#5B6472]");
+  });
+
   it("builds the expected filename and page label", () => {
     const document = {
       templateKey: "professional-cn" as const,
@@ -59,6 +90,32 @@ describe("TemplateProfessionalCN", () => {
     expect(buildResumePdfFilename(document)).toMatch(/^王小明-AI 产品经理-可投递版-\d{8}\.pdf$/u);
     expect(estimateResumePageCount(document)).toBe(1);
     expect(getResumePageWaterLabel(3)).toBe("建议删减后再导出");
+  });
+
+  it("renders Professional CN export HTML with text bullets and 0→1 labels", () => {
+    const html = renderResumeDocumentHtml({
+      templateKey: "professional-cn",
+      header: {
+        name: "王小明",
+        title: "AI 产品经理",
+        meta: []
+      },
+      sections: [
+        {
+          id: "personal-strengths",
+          title: "个人优势",
+          items: [
+            {
+              type: "text",
+              text: "产品 0→1 落地经验：参与智能客服优化相关产品工作。"
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(html).toContain(".text-item::before");
+    expect(html).toContain("<strong>产品 0→1 落地经验：</strong>");
   });
 
   it("omits empty optional header fields", () => {

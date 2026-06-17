@@ -198,6 +198,213 @@ describe("composeSnapshotDocument", () => {
     });
   });
 
+  it("preserves resume-only calibrated work and project sections without treating them as an application", async () => {
+    const document = await composeSnapshotDocument({
+      id: "resume-only-draft",
+      userId: "default-user",
+      company: "",
+      jobTitle: "AI 产品经理",
+      language: "zh",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "",
+      jdAsset: {
+        storagePath: "/tmp/empty-jd.txt",
+        mimeType: "text/plain",
+        originalFilename: "empty-jd.txt"
+      },
+      resumeExtractedText: "示例候选人",
+      calibratedResume: {
+        status: "needs_review",
+        personalInfo: {
+          name: "示例候选人",
+          phone: "13800000000",
+          email: "candidate@example.com"
+        },
+        entries: [
+          {
+            id: "summary-1",
+            candidateId: "summary-1",
+            section: "summary",
+            sectionType: "summary",
+            title: "个人优势",
+            bullets: ["产品 0→1 落地经验", "AI Agent 解决方案能力"],
+            sourceText: "个人优势",
+            confidence: "medium",
+            issues: []
+          },
+          {
+            id: "work-1",
+            candidateId: "work-1",
+            section: "work",
+            sectionType: "work",
+            title: "广发银行股份有限公司北京分行",
+            organization: "广发银行股份有限公司北京分行",
+            role: "AI 场景经理",
+            dateRange: "2025.04 - 2026.03",
+            bullets: [],
+            sourceText: "广发银行股份有限公司北京分行 AI 场景经理",
+            confidence: "medium",
+            issues: []
+          },
+          {
+            id: "work-2",
+            candidateId: "work-2",
+            section: "work",
+            sectionType: "work",
+            title: "广发银行股份有限公司北京分行",
+            organization: "广发银行股份有限公司北京分行",
+            role: "综合运营岗（管培生）",
+            dateRange: "2022.08 - 2025.03",
+            bullets: ["协助网点负责人进行运营数据统计分析"],
+            sourceText: "综合运营岗",
+            confidence: "medium",
+            issues: []
+          },
+          {
+            id: "work-3",
+            candidateId: "work-3",
+            section: "work",
+            sectionType: "work",
+            title: "北京金山云网络技术有限公司",
+            organization: "北京金山云网络技术有限公司",
+            role: "财务分析 / 财务 BP（实习）",
+            dateRange: "2021.06 - 2022.06",
+            bullets: ["运用 Excel 和 Tableau 搭建自动化预算分析模板"],
+            sourceText: "金山云",
+            confidence: "medium",
+            issues: []
+          },
+          {
+            id: "work-4",
+            candidateId: "work-4",
+            section: "work",
+            sectionType: "work",
+            title: "信阳鹰博户外拓展训练有限公司",
+            organization: "信阳鹰博户外拓展训练有限公司",
+            role: "培训策划专员 / 数学辅导教师",
+            dateRange: "2017.09 - 2019.12",
+            bullets: ["参与公司创新创业项目策划"],
+            sourceText: "鹰博",
+            confidence: "medium",
+            issues: []
+          },
+          {
+            id: "project-1",
+            candidateId: "project-1",
+            section: "project",
+            sectionType: "project",
+            title: "员工业务智能助手（对内）",
+            organization: "广发银行股份有限公司北京分行",
+            role: "AI 场景经理",
+            dateRange: "2025.04 - 2026.03",
+            bullets: ["负责面向银行内部员工的智能助手产品设计"],
+            sourceText: "项目一",
+            confidence: "medium",
+            issues: []
+          },
+          {
+            id: "project-2",
+            candidateId: "project-2",
+            section: "project",
+            sectionType: "project",
+            title: "智能金融服务与数据分析平台",
+            organization: "广发银行股份有限公司北京分行",
+            role: "AI 场景经理",
+            dateRange: "2025.04 - 2026.03",
+            bullets: ["负责手机银行与网银渠道 AI 客服的需求定义与方案设计"],
+            sourceText: "项目二",
+            confidence: "medium",
+            issues: []
+          },
+          {
+            id: "project-3",
+            candidateId: "project-3",
+            section: "project",
+            sectionType: "project",
+            title: "AlphaFund — 基金投研辅助智能体",
+            organization: "广发银行股份有限公司北京分行",
+            role: "AI 场景经理",
+            dateRange: "2025.04 - 2026.03",
+            bullets: ["独立完成产品定位与 MVP PRD"],
+            sourceText: "项目三",
+            confidence: "medium",
+            issues: []
+          },
+          {
+            id: "education-1",
+            candidateId: "education-1",
+            section: "education",
+            sectionType: "education",
+            title: "对外经济贸易大学",
+            role: "硕士",
+            organization: "全球价值链（应用经济学）",
+            dateRange: "2020 - 2022",
+            bullets: [],
+            sourceText: "对外经济贸易大学",
+            confidence: "medium",
+            issues: []
+          },
+          {
+            id: "education-2",
+            candidateId: "education-2",
+            section: "education",
+            sectionType: "education",
+            title: "湖南工业大学",
+            role: "本科",
+            organization: "数学与应用数学（金融统计）",
+            dateRange: "2013 - 2017",
+            bullets: [],
+            sourceText: "湖南工业大学",
+            confidence: "medium",
+            issues: []
+          }
+        ],
+        unclassifiedText: [],
+        parseWarnings: [],
+        modelNotes: ["当前为规则兜底"]
+      },
+      analysis: {
+        fitScore: 0,
+        optimizationMode: "baseline_jd_match",
+        strengths: [],
+        gaps: [],
+        riskNotes: []
+      },
+      suggestions: [],
+      factSubmissions: [],
+      masterFactsUsed: []
+    });
+
+    const personalInfoText = JSON.stringify(document.sections.find((section) => section.id === "personal-info")?.items);
+    const strengthText = JSON.stringify(document.sections.find((section) => section.id === "personal-strengths")?.items);
+    const workItems = document.sections.find((section) => section.id === "work-experience")?.items ?? [];
+    const projectItems = document.sections.find((section) => section.id === "project-experience")?.items ?? [];
+    const educationItems = document.sections.find((section) => section.id === "education")?.items ?? [];
+
+    expect(personalInfoText).toContain("对外经济贸易大学");
+    expect(personalInfoText).toContain("硕士");
+    expect(personalInfoText).not.toContain("湖南工业大学");
+    expect(strengthText).toContain("产品 0→1 落地经验");
+    expect(strengthText).not.toContain("\"text\":\"个人优势\"");
+    expect(workItems).toHaveLength(4);
+    expect(projectItems).toHaveLength(3);
+    expect(educationItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          heading: "对外经济贸易大学",
+          subheading: "全球价值链（应用经济学） ｜ 硕士"
+        }),
+        expect.objectContaining({
+          heading: "湖南工业大学",
+          subheading: "数学与应用数学（金融统计） ｜ 本科"
+        })
+      ])
+    );
+    expect(JSON.stringify(workItems)).toContain("北京金山云网络技术有限公司");
+    expect(JSON.stringify(projectItems)).toContain("AlphaFund");
+  });
+
   it("extracts the candidate name and sections from a markdown resume with frontmatter", async () => {
     const document = await composeSnapshotDocument({
       id: "draft-4",
@@ -217,9 +424,9 @@ describe("composeSnapshotDocument", () => {
 title: 简历助手重制
 type: resume-snapshot
 ---
-# 吴世阳
+# 示例候选人
 
-18513449520 | wsyoung@example.com
+13800000000 | wsyoung@example.com
 GitHub：github.com/shiyoungwoo/OfferYou
 作品集：OfferYou 项目案例 / AIPM Notebook
 
@@ -242,10 +449,10 @@ Prompt Engineering / Obsidian / AI Agent`,
       masterFactsUsed: []
     });
 
-    expect(document.header.name).toBe("吴世阳");
+    expect(document.header.name).toBe("示例候选人");
     expect(document.header.contacts).toEqual([
       "wsyoung@example.com",
-      "18513449520",
+      "13800000000",
       "github.com/shiyoungwoo/OfferYou",
       "OfferYou 项目案例 / AIPM Notebook"
     ]);
@@ -267,10 +474,10 @@ Prompt Engineering / Obsidian / AI Agent`,
         mimeType: "text/plain",
         originalFilename: "jd.txt"
       },
-      resumeExtractedText: `2026/3/11 00:26吴世阳 - AI产品经理简历
+      resumeExtractedText: `2026/3/11 00:26示例候选人 - AI产品经理简历
 第1/2⻚file:///tmp/resume-ai-pm.html
-吴 世 阳
-男 | 31岁 | 共产党员 | 18513449520 | 434995517@qq.com
+李 明 轩
+男 | 31岁 | 共产党员 | 13800000000 | candidate@example.com
 求职意向：AI 产品经理 / 大数据产品经理
 个 人 优 势
 AI 产品实践者：正在独立设计 AI 求职辅助产品$O&erYou$，已完成 MVP 产品协议设计。
@@ -335,7 +542,7 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
       masterFactsUsed: []
     });
 
-    expect(document.header.name).toBe("吴世阳");
+    expect(document.header.name).toBe("李明轩");
     expect(document.header.title).toBe("AI Prompt 产品专员");
     expect(JSON.stringify(document.sections.find((section) => section.id === "personal-strengths")?.items)).toContain(
       "AI 产品与客户反馈理解能力并重"
@@ -425,7 +632,7 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
         originalFilename: "jd.txt"
       },
       resumeExtractedText: [
-        "吴世阳",
+        "示例候选人",
         "个人优势",
         "> **AI 产品实践者：** 正在独立设计 AI 求职辅助产品 OfferYou。",
         "教育背景",
@@ -513,9 +720,9 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
       calibratedResume: {
         status: "needs_review",
         personalInfo: {
-          name: "吴世阳",
-          phone: "18513449520",
-          email: "434995517@qq.com"
+          name: "示例候选人",
+          phone: "13800000000",
+          email: "candidate@example.com"
         },
         entries: [
           {
@@ -642,9 +849,9 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
       calibratedResume: {
         status: "confirmed",
         personalInfo: {
-          name: "吴世阳",
-          phone: "18513449520",
-          email: "434995517@qq.com"
+          name: "示例候选人",
+          phone: "13800000000",
+          email: "candidate@example.com"
         },
         entries: [
           {
@@ -736,9 +943,9 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
       calibratedResume: {
         status: "confirmed",
         personalInfo: {
-          name: "吴世阳",
-          phone: "18513449520",
-          email: "434995517@qq.com"
+          name: "示例候选人",
+          phone: "13800000000",
+          email: "candidate@example.com"
         },
         entries: [
           {
@@ -823,9 +1030,9 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
       calibratedResume: {
         status: "confirmed",
         personalInfo: {
-          name: "吴世阳",
-          phone: "18513449520",
-          email: "434995517@qq.com"
+          name: "示例候选人",
+          phone: "13800000000",
+          email: "candidate@example.com"
         },
         entries: [
           {
@@ -876,7 +1083,7 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
       calibratedResume: {
         status: "confirmed",
         personalInfo: {
-          name: "吴世阳"
+          name: "示例候选人"
         },
         entries: [
           {
@@ -946,7 +1153,7 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
       calibratedResume: {
         status: "confirmed",
         personalInfo: {
-          name: "吴世阳"
+          name: "示例候选人"
         },
         entries: [
           {
@@ -994,5 +1201,149 @@ B 端客户服务：面向中铁、中国物流集团等 B 端客户提供上门
     expect(projectText).toContain("一键导出与投递记录");
     expect(projectText).not.toContain("\"text\":\"键导出与投递记录\"");
     expect(projectText).not.toContain("\"bullets\":[\"键导出与投递记录\"");
+  });
+
+  it("splits explicit triangle separators back into individual resume bullets", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-triangle-bullets",
+      userId: "user-1",
+      company: "",
+      jobTitle: "AI 产品经理",
+      language: "zh-CN",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "",
+      resumeExtractedText: "",
+      calibratedResume: {
+        status: "confirmed",
+        personalInfo: {
+          name: "示例候选人"
+        },
+        entries: [
+          {
+            id: "work-1",
+            section: "work",
+            title: "广发银行股份有限公司北京分行",
+            role: "综合运营岗",
+            dateRange: "2022 - 2024",
+            bullets: [
+              "协助运营数据统计分析 ▸ 面向 B 端客户提供产品讲解与方案推介 ▸ 输出可疑交易分析报告"
+            ],
+            sourceText: "广发银行股份有限公司北京分行",
+            confidence: "high",
+            issues: []
+          }
+        ],
+        unclassifiedText: [],
+        parseWarnings: [],
+        modelNotes: []
+      },
+      suggestions: [],
+      analysis: {
+        fitScore: 0,
+        optimizationMode: "baseline_jd_match",
+        strengths: [],
+        gaps: [],
+        riskNotes: []
+      },
+      factSubmissions: [],
+      masterFactsUsed: []
+    } as any);
+
+    const workItems = document.sections.find((section) => section.id === "work-experience")?.items ?? [];
+    const workText = JSON.stringify(workItems);
+
+    expect(workText).toContain("协助运营数据统计分析");
+    expect(workText).toContain("面向 B 端客户提供产品讲解与方案推介");
+    expect(workText).toContain("输出可疑交易分析报告");
+    expect(workText).not.toContain("▸");
+  });
+
+  it("repairs resume-only snapshots when title is candidate name and work content leaks into projects", async () => {
+    const document = await composeSnapshotDocument({
+      id: "draft-resume-only-regression",
+      userId: "user-1",
+      company: "",
+      jobTitle: "示例候选人",
+      language: "zh-CN",
+      stage: "analysis_ready",
+      status: "created",
+      jdPreview: "",
+      resumeExtractedText: "",
+      calibratedResume: {
+        status: "confirmed",
+        personalInfo: {
+          name: "示例候选人",
+          phone: "13800000000",
+          email: "candidate@example.com"
+        },
+        entries: [
+          {
+            id: "work-bank",
+            section: "work",
+            title: "广发银行股份有限公司北京分行",
+            organization: "广发银行股份有限公司北京分行",
+            role: "AI 产品经理",
+            dateRange: "",
+            bullets: [],
+            sourceText: "广发银行股份有限公司北京分行 AI 产品经理",
+            confidence: "high",
+            issues: []
+          },
+          {
+            id: "project-bank",
+            section: "project",
+            title: "员工业务智能助手（对内）",
+            role: "AI 产品经理",
+            dateRange: "",
+            bullets: [
+              "▸ 负责面向银行内部员工的智能助手设计，基于内部知识库构建 RAG 检索体系▸ 成果：业务知识查询效率提升 60%，合规培训覆盖率显著提高，新员工独立上岗周期缩短综合运营岗（管培生）（2022 - 2024）▸ 协助运营数据统计分析，监控业务量波动并定位异常，为人员排班与窗口动态调整提供数据支撑▸ 面向中铁、中国物流集团等 B 端客户提供上门产品讲解与方案推介"
+            ],
+            sourceText: "员工业务智能助手（对内）",
+            confidence: "high",
+            issues: []
+          },
+          {
+            id: "project-ai",
+            section: "project",
+            title: "智能金融客服与数据分析平台",
+            role: "AI 产品经理",
+            bullets: ["负责手机银行与网银渠道 AI 客服的需求定义与方案设计。"],
+            sourceText: "智能金融客服与数据分析平台",
+            confidence: "high",
+            issues: []
+          }
+        ],
+        unclassifiedText: [],
+        parseWarnings: [],
+        modelNotes: []
+      },
+      suggestions: [],
+      analysis: {
+        fitScore: 0,
+        optimizationMode: "baseline_jd_match",
+        strengths: [],
+        gaps: [],
+        riskNotes: []
+      },
+      factSubmissions: [],
+      masterFactsUsed: []
+    } as any);
+
+    expect(document.header.title).toBe("");
+    expect(JSON.stringify(document.sections.find((section) => section.id === "personal-info")?.items)).not.toContain("求职意向：示例候选人");
+
+    const strengthsText = JSON.stringify(document.sections.find((section) => section.id === "personal-strengths")?.items ?? []);
+    expect(strengthsText).toContain("AI 产品落地经验");
+    expect(strengthsText).toContain("金融业务与合规意识");
+
+    const workText = JSON.stringify(document.sections.find((section) => section.id === "work-experience")?.items ?? []);
+    const projectText = JSON.stringify(document.sections.find((section) => section.id === "project-experience")?.items ?? []);
+
+    expect(workText).toContain("综合运营岗（管培生）");
+    expect(workText).toContain("2022 - 2024");
+    expect(workText).toContain("协助运营数据统计分析");
+    expect(projectText).not.toContain("综合运营岗（管培生）");
+    expect(projectText).toContain("员工业务智能助手（对内）");
   });
 });

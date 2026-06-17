@@ -1,6 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getStableSquishLevel, PreviewWorkspace } from "@/components/preview/preview-workspace";
 
 vi.mock("next/link", () => ({
@@ -8,6 +8,10 @@ vi.mock("next/link", () => ({
 }));
 
 describe("PreviewWorkspace", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("lets the user add and remove items in preview edit mode", async () => {
     render(
       <PreviewWorkspace
@@ -79,6 +83,53 @@ describe("PreviewWorkspace", () => {
 
     expect(screen.getByText("手机：139 0000 0000")).toBeTruthy();
     expect(screen.getByText("邮箱：pm@example.com")).toBeTruthy();
+  });
+
+  it("saves the current resume snapshot separately from PDF export or application records", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <PreviewWorkspace
+        draftId="draft-save"
+        initialDocument={{
+          templateKey: "professional-cn",
+          header: {
+            name: "王小明",
+            title: "产品经理",
+            meta: []
+          },
+          sections: [
+            {
+              id: "personal-strengths",
+              title: "个人优势",
+              tone: "hero",
+              items: [{ type: "text", text: "擅长复杂信息整理" }]
+            }
+          ]
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑当前预览" }));
+    fireEvent.change(screen.getByDisplayValue("王小明"), { target: { value: "王同学" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存简历" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/drafts/draft-save/snapshot",
+        expect.objectContaining({
+          method: "PATCH"
+        })
+      );
+    });
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/drafts/draft-save/application-record",
+      expect.anything()
+    );
   });
 
   it("keeps preview squish level stable near page-height thresholds", () => {

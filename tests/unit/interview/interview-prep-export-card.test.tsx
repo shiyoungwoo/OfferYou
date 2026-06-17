@@ -9,7 +9,7 @@ describe("InterviewPrepExportCard", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders a copyable markdown summary with review checklist", async () => {
+  it("renders interview prep progress with copy as a secondary action", async () => {
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", {
       clipboard: {
@@ -30,26 +30,24 @@ describe("InterviewPrepExportCard", () => {
         exportText={createExportText()}
         favoriteQuestionCount={1}
         jobTitle="AI Product Manager"
+        questionCount={5}
       />
     );
 
-    const exportText = screen.getByLabelText("面试准备导出文本") as HTMLTextAreaElement;
-    expect(exportText.value).toContain("面试准备复盘卡");
-    expect(exportText.value).toContain("OfferYou");
-    expect(exportText.value).toContain("AI Product Manager");
-    expect(exportText.value).toContain("我会先把真实经历讲清楚。");
-    expect(exportText.value).toContain("请说明简历里最能支撑");
-    expect(exportText.value).toContain("答案草稿：我会先用一条事实说明匹配度。");
-
+    expect(screen.getByText("面试准备总览")).toBeTruthy();
+    expect(screen.getByText("1 / 5")).toBeTruthy();
+    expect(screen.getByText("已写答案")).toBeTruthy();
     expect(screen.getByText("面试前复盘清单")).toBeTruthy();
     expect(screen.getByText("核对公司与岗位是否一致：OfferYou · AI Product Manager")).toBeTruthy();
     expect(screen.getByText("确认收藏问题是否已标记：1 题")).toBeTruthy();
+    expect(screen.queryByText("一段可复制的复盘文本")).toBeNull();
+    expect(screen.queryByText("导出文本")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "复制复盘文本" }));
+    fireEvent.click(screen.getByRole("button", { name: "复制面试卡片" }));
 
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenCalledWith(expect.stringContaining("面试准备复盘卡"));
-      expect(screen.getByText("已复制到剪贴板。")).toBeTruthy();
+      expect(screen.getByText("已复制，可粘贴到备忘录。")).toBeTruthy();
     });
   });
 });

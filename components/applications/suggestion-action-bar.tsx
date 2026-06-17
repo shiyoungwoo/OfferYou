@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useTransition } from "react";
+import React, { useState, useTransition } from "react";
 
 type SuggestionActionBarProps = {
   draftId: string;
@@ -38,9 +38,11 @@ export function SuggestionActionBar({
 }: SuggestionActionBarProps) {
   const isFailedVerification = verificationStatus === "fail";
   const [isPending, startTransition] = useTransition();
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   function runSimpleAction(action: "accept" | "reject", e: React.MouseEvent) {
     e.stopPropagation();
+    setErrorMsg(null);
     startTransition(async () => {
       if (localOnly) {
         if (action === "accept") {
@@ -61,6 +63,8 @@ export function SuggestionActionBar({
       });
 
       if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        setErrorMsg(body?.error ?? `${action === "accept" ? "接受" : "拒绝"}失败，请重试。`);
         return;
       }
 
@@ -80,6 +84,7 @@ export function SuggestionActionBar({
         {isFailedVerification && currentStatus === "pending" && (
           <span className="text-[10px] text-rose-500 font-medium">未通过事实校验，需编辑或 AI 微调。</span>
         )}
+        {errorMsg && <span className="w-full text-right text-[10px] text-rose-500 font-medium">{errorMsg}</span>}
         <button
           className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors ${
             currentStatus === "accepted"
@@ -131,6 +136,7 @@ export function SuggestionActionBar({
       {isFailedVerification && currentStatus === "pending" && (
         <p className="w-full text-xs text-rose-500 font-medium">未通过事实校验，需编辑或 AI 微调后再确认。</p>
       )}
+      {errorMsg && <p className="w-full text-xs text-rose-500 font-medium">{errorMsg}</p>}
       <button
         className={`rounded-full px-4 py-2 text-sm font-semibold transition shadow-sm ${
           currentStatus === "accepted"

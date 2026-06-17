@@ -9,10 +9,10 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#12202f",
-        paper: "#f7f5ef",
-        accent: "#155eef",
-        line: "#d5ddea"
+        ink: "#1f1f1f",
+        paper: "#f5f7fa",
+        accent: "#1677ff",
+        line: "#e5e7eb"
       },
       boxShadow: {
         card: "0 20px 45px rgba(18, 32, 47, 0.08)"

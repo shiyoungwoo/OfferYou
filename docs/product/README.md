@@ -6,6 +6,7 @@
 
 - [OfferYou PRD](./OfferYou-PRD.md)
 - [OfferYou Architecture](./OfferYou-Architecture.md)
+- [OfferYou UI 信息架构与改版方向](./OfferYou-UI-Information-Architecture.md)
 
 ## 架构决策
 
@@ -22,5 +23,6 @@
 
 - 产品判断优先对齐 `OfferYou-PRD.md`。
 - 技术实现优先对齐 `OfferYou-Architecture.md`。
+- 页面入口、工作台结构和原型设计优先对齐 `OfferYou-UI-Information-Architecture.md`。
 - 涉及长期架构取舍时，补充或更新 `decisions/`。
 - 阶段计划不能覆盖主文档的产品原则和架构约束。

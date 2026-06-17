@@ -4,8 +4,13 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createApplicationRecord,
+  createManualApplicationRecord,
+  deleteApplicationRecord,
+  getApplicationRecordDisplayStatus,
   listApplicationRecords,
-  updateApplicationRecordInterviewPrep
+  updateApplicationRecordInterviewOutcome,
+  updateApplicationRecordInterviewPrep,
+  updateApplicationRecordInterviewSchedule
 } from "@/lib/services/applications/application-record-service";
 import { saveWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import { saveSnapshotDocument } from "@/lib/services/snapshot/snapshot-service";
@@ -77,9 +82,9 @@ describe("createApplicationRecord", () => {
     const snapshot: ResumeDocument = {
       templateKey: "professional-cn",
       header: {
-        name: "吴世阳",
+        name: "示例候选人",
         title: "AI 产品经理",
-        meta: ["手机：18513449520"]
+        meta: ["手机：13800000000"]
       },
       sections: []
     };
@@ -104,6 +109,23 @@ describe("createApplicationRecord", () => {
     expect(record.reusedMasterFacts[0]?.title).toBe("Workflow instrumentation rollout");
     expect(record.interviewStatus).toBe("none");
     expect(record.interviewPrepId).toBeUndefined();
+  });
+
+  it("creates a manual interview source application record without a draft", async () => {
+    const record = await createManualApplicationRecord({
+      company: "月之暗面",
+      jobTitle: "AI 应用产品经理",
+      appliedAt: "2026-06-18T02:30:00.000Z"
+    });
+    const saved = await readApplicationRecord(record.id);
+
+    expect(record.source).toBe("manual_interview");
+    expect(record.company).toBe("月之暗面");
+    expect(record.jobTitle).toBe("AI 应用产品经理");
+    expect(record.draftId).toBe("");
+    expect(record.snapshotId).toBe("");
+    expect(record.acceptedSuggestionCount).toBe(0);
+    expect(saved?.source).toBe("manual_interview");
   });
 
   it("normalizes older records without interview fields", async () => {
@@ -169,4 +191,126 @@ describe("createApplicationRecord", () => {
     expect(updated.interviewPrepId).toBe("interview-record-1");
     expect(updated.interviewStatus).toBe("preparing");
   });
+
+  it("schedules an interview on an existing record", async () => {
+    const record = await createApplicationRecord({
+      draftId: "draft-1",
+      exportStoragePath: "/tmp/export.pdf"
+    });
+
+    const updated = await updateApplicationRecordInterviewSchedule({
+      recordId: record.id,
+      interviewAt: "2026-06-18T02:30:00.000Z",
+      interviewRound: "一面",
+      interviewNotes: "重点准备业务理解"
+    });
+    const saved = await readApplicationRecord(record.id);
+
+    expect(updated.interviewStatus).toBe("scheduled");
+    expect(updated.interviewAt).toBe("2026-06-18T02:30:00.000Z");
+    expect(updated.interviewRound).toBe("一面");
+    expect(updated.interviewNotes).toBe("重点准备业务理解");
+    expect(saved?.interviewStatus).toBe("scheduled");
+    expect(saved?.interviewAt).toBe("2026-06-18T02:30:00.000Z");
+  });
+
+  it("derives awaiting-result display status for past interviews that are not finished", async () => {
+    const record = await createApplicationRecord({
+      draftId: "draft-1",
+      exportStoragePath: "/tmp/export.pdf"
+    });
+
+    const scheduled = await updateApplicationRecordInterviewSchedule({
+      recordId: record.id,
+      interviewAt: "2026-06-11T09:00:00.000Z",
+      interviewRound: "一面",
+      interviewNotes: "线上会议"
+    });
+
+    expect(
+      getApplicationRecordDisplayStatus(scheduled, new Date("2026-06-12T00:00:00.000Z"))
+    ).toBe("awaiting_result");
+    expect(
+      getApplicationRecordDisplayStatus(scheduled, new Date("2026-06-10T00:00:00.000Z"))
+    ).toBe("scheduled");
+  });
+
+  it("records interview outcome and moves next-round time into the schedule", async () => {
+    const record = await createApplicationRecord({
+      draftId: "draft-1",
+      exportStoragePath: "/tmp/export.pdf"
+    });
+
+    await updateApplicationRecordInterviewSchedule({
+      recordId: record.id,
+      interviewAt: "2026-06-11T09:00:00.000Z",
+      interviewRound: "一面",
+      interviewNotes: "腾讯会议"
+    });
+
+    const updated = await updateApplicationRecordInterviewOutcome({
+      recordId: record.id,
+      interviewOutcome: "next_round",
+      nextInterviewAt: "2026-06-18T09:00:00.000Z",
+      interviewFollowUpNotes: "二面准备业务问题"
+    });
+    const saved = await readApplicationRecord(record.id);
+    const { listInterviewSchedules } = await import("@/lib/services/interview/interview-schedule-service");
+    const schedules = await listInterviewSchedules();
+
+    expect(updated.interviewStatus).toBe("scheduled");
+    expect(saved?.nextInterviewAt).toBe("2026-06-18T09:00:00.000Z");
+    expect(saved?.interviewOutcome).toBe("next_round");
+    expect(saved?.interviewFollowUpNotes).toBe("二面准备业务问题");
+    expect(schedules[0]?.applicationRecordId).toBe(record.id);
+    expect(schedules[0]?.interviewAt).toBe("2026-06-18T09:00:00.000Z");
+    expect(schedules[0]?.status).toBe("scheduled");
+  });
+
+  it("deletes an application record and its linked interview prep", async () => {
+    const record = await createApplicationRecord({
+      draftId: "draft-1",
+      exportStoragePath: "/tmp/export.pdf"
+    });
+
+    await executeSql(`
+      INSERT INTO interview_preps (id, application_record_id, payload_json, created_at, updated_at)
+      VALUES (
+        'prep-to-delete',
+        '${record.id}',
+        '{"id":"prep-to-delete","applicationRecordId":"${record.id}"}',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      );
+    `);
+
+    await updateApplicationRecordInterviewPrep({
+      recordId: record.id,
+      interviewPrepId: "prep-to-delete",
+      interviewStatus: "preparing"
+    });
+
+    const deleted = await deleteApplicationRecord(record.id);
+    const missingRecord = await readApplicationRecord(record.id);
+    const records = await listApplicationRecords();
+
+    const prepRows = await executeAndReadPrepCount(record.id);
+
+    expect(deleted).toBe(true);
+    expect(missingRecord).toBeNull();
+    expect(records).toHaveLength(0);
+    expect(prepRows).toBe(0);
+  });
+
+  it("returns false when deleting a missing application record", async () => {
+    await expect(deleteApplicationRecord("missing-record")).resolves.toBe(false);
+  });
 });
+
+async function executeAndReadPrepCount(recordId: string) {
+  const { querySql } = await import("@/lib/db");
+  const rows = await querySql<{ count: number }>(
+    `SELECT COUNT(*) as count FROM interview_preps WHERE application_record_id = '${recordId}';`
+  );
+  return rows[0]?.count ?? 0;
+}

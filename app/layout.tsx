@@ -4,7 +4,7 @@ import { MainLayout } from "@/components/layout/main-layout";
 
 export const metadata: Metadata = {
   title: "OfferYou",
-  description: "基于真实经历的岗位定制助手：差距分析、建议清单、快照简历与长期资料沉淀。",
+  description: "AI 智能求职助手，助力更高效地准备简历、面试与职业规划。",
   icons: {
     icon: "/icon.svg"
   }

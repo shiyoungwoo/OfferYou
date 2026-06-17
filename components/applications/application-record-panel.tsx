@@ -8,26 +8,26 @@ type ApplicationRecordPanelProps = {
 export function ApplicationRecordPanel({ record }: ApplicationRecordPanelProps) {
   return (
     <section className="rounded-[1.75rem] border border-line bg-white/85 p-6 shadow-card">
-      <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Application Record</p>
+      <p className="text-sm uppercase tracking-[0.24em] text-slate-500">投递记录</p>
       <h1 className="mt-4 text-4xl font-semibold">{record.company}</h1>
       <p className="mt-3 text-lg text-accent">{record.jobTitle}</p>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <RecordCard label="Applied At" value={record.appliedAt} />
-        <RecordCard label="Accepted Suggestions" value={String(record.acceptedSuggestionCount)} />
-        <RecordCard label="Draft" value={record.draftId} />
-        <RecordCard label="Snapshot" value={record.snapshotId} />
-        <RecordCard label="Interview Status" value={renderInterviewStatus(record.interviewStatus)} />
+        <RecordCard label="投递时间" value={record.appliedAt} />
+        <RecordCard label="已接受建议" value={String(record.acceptedSuggestionCount)} />
+        <RecordCard label="草稿 ID" value={record.draftId} />
+        <RecordCard label="快照 ID" value={record.snapshotId} />
+        <RecordCard label="面试状态" value={renderInterviewStatus(record.interviewStatus)} />
       </div>
 
       <div className="mt-6 rounded-[1.35rem] border border-line bg-paper p-5 text-sm leading-6 text-slate-700">
-        Export artifact: {record.exportStoragePath ?? "No PDF export path recorded."}
+        导出文件：{record.exportStoragePath ?? "尚未导出 PDF。"}
       </div>
 
       <div className="mt-6 rounded-[1.35rem] border border-line bg-white p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Interview Prep</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">面试准备</p>
             <h2 className="mt-2 text-xl font-semibold text-slate-900">从这条投递记录进入面试准备</h2>
             <p className="mt-2 text-sm leading-6 text-slate-700">
               系统会自动带入公司、岗位、快照和已确认事实，避免重复输入。
@@ -45,11 +45,11 @@ export function ApplicationRecordPanel({ record }: ApplicationRecordPanelProps) 
       <div className="mt-6 rounded-[1.35rem] border border-line bg-paper p-5">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Master Reuse</p>
-            <h2 className="mt-2 text-xl font-semibold text-slate-900">Confirmed facts reused in this application</h2>
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">事实复用</p>
+            <h2 className="mt-2 text-xl font-semibold text-slate-900">本次投递复用的已确认事实</h2>
           </div>
           <div className="rounded-full border border-line bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-500">
-            {record.reusedMasterFacts.length} facts
+            {record.reusedMasterFacts.length} 条
           </div>
         </div>
 
@@ -66,7 +66,7 @@ export function ApplicationRecordPanel({ record }: ApplicationRecordPanelProps) 
             ))}
           </div>
         ) : (
-          <p className="mt-4 text-sm leading-6 text-slate-700">This application did not reuse any confirmed Master facts.</p>
+          <p className="mt-4 text-sm leading-6 text-slate-700">本次投递未复用已确认的事实。</p>
         )}
       </div>
     </section>

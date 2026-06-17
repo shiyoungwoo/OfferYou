@@ -56,6 +56,8 @@ describe("OpenDataLoader PDF integration", () => {
 
     expect(result.extractedText).toContain("OpenDataLoader PDF");
     expect(result.extractedText).toContain("cross-team delivery");
-    expect(result.extractionState).toBe("full_text");
+    expect(result.extractionState).toBe("partial_text");
+    expect(result.parseQualityReview?.nextAction).toBe("ask_user_confirm");
+    expect(result.parseQualityReview?.fallbackReason).toContain("模型");
   });
 });

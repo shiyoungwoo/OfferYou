@@ -1,8 +1,8 @@
 import { normalizeResumeTemplateKey, type ResumeDocument, type ResumeTemplateKey } from "@/lib/document/resume-document";
 import { getDefaultUserContext } from "@/lib/default-user";
-import { createApplicationRecord } from "@/lib/services/applications/application-record-service";
 import { renderPdfFromHtml } from "@/lib/services/export/pdf-export-service";
 import { buildResumePdfFilename, renderResumeDocumentHtml } from "@/lib/services/export/preview-renderer";
+import { saveResumeVersionForDraft } from "@/lib/services/resume/resume-version-service";
 import { readSnapshotForDraft, saveSnapshotDocument } from "@/lib/services/snapshot/snapshot-service";
 
 export type ExportResumeDocumentInput = {
@@ -36,14 +36,15 @@ export async function exportResumeDocumentForDraft(input: ExportResumeDocumentIn
     filename: buildResumePdfFilename(snapshot)
   });
 
-  const record = await createApplicationRecord({
+  await saveResumeVersionForDraft({
+    userId,
     draftId: input.draftId,
-    exportStoragePath: result.storagePath
+    document: snapshot,
+    sourceType: "pdf_export",
+    pdfStoragePath: result.storagePath
   });
 
   return {
-    ...result,
-    recordId: record.id,
-    recordPath: `/applications/${input.draftId}/record`
+    ...result
   };
 }

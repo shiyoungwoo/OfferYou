@@ -51,9 +51,9 @@ export function TemplateProfessionalCN({ document }: TemplateProfessionalCNProps
                   return (
                     <li key={itemIdx} className="text-item relative pl-4 text-[10pt] leading-[1.6] text-[#1F2430] before:absolute before:left-0 before:top-[0.68em] before:h-[4px] before:w-[4px] before:rounded-full before:bg-[#5B6472]">
                       {(() => {
-                        // Labels can contain spaces, English words, slash, and parentheses.
+                        // Labels can contain spaces, English words, slash, arrows, and parentheses.
                         const colonMatch = item.text.match(
-                          /^\s*([\u4e00-\u9fa5A-Za-z0-9＋+&/（）()·\s]{2,24})\s*[:：]\s*(.+)$/su
+                          /^\s*([\u4e00-\u9fa5A-Za-z0-9＋+&/（）()·\s→>\-]{2,24})\s*[:：]\s*(.+)$/su
                         );
                         if (colonMatch) {
                           const label = colonMatch[1].trim();

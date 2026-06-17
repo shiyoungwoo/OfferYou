@@ -1,14 +1,9 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
-import path from "node:path";
 import { getDefaultUserContext } from "@/lib/default-user";
-import { ModelProviderStatusCard } from "@/components/me/model-provider-status-card";
-import { SelfUseReadinessCard } from "@/components/me/self-use-readiness-card";
-import { getAvailableModelProviders } from "@/lib/ai/model-provider-config";
 import { listApplicationRecords } from "@/lib/services/applications/application-record-service";
 import { listMasterFacts } from "@/lib/services/master/master-service";
+import { listResumeVersions, type ResumeVersion } from "@/lib/services/resume/resume-version-service";
 import {
   getLatestConfirmedCareerNavigation,
   getLatestConfirmedTalentProfile
@@ -21,153 +16,185 @@ export default async function MePage() {
   const talentProfile = await getLatestConfirmedTalentProfile(userId);
   const careerNavigation = await getLatestConfirmedCareerNavigation(userId);
   const masterFacts = await listMasterFacts(userId);
+  const resumeVersions = await listResumeVersions(userId, 12);
   const applicationRecords = await listApplicationRecords();
-  const reportPath = path.join(process.cwd(), "docs", "quality", "job-apply-fixture-outputs.md");
-  const artifactRoot = path.join(process.cwd(), "docs", "quality", "job-apply-fixture-artifacts");
-  const fixturePdfCount = await countFixturePdfs(artifactRoot);
-  const interviewPrepCount = applicationRecords.filter((record) => Boolean(record.interviewPrepId)).length;
 
   return (
-    <main className="min-h-screen px-6 py-10 md:px-10">
-      <section className="mx-auto flex max-w-6xl flex-col gap-6">
-        <header className="rounded-[2rem] border border-white/70 bg-white/85 p-8 shadow-card">
-          <p className="text-sm uppercase tracking-[0.3em] text-accent">我的</p>
-          <h1 className="mt-4 text-4xl font-semibold">把简历、发现自己、长期资料放回同一个地方。</h1>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-700">
-            这个页面聚合你的长期资料。用户可以在这里回看自己的资料库、最近一次发现自己的结果、职业方向，以及已经生成过的简历和申请记录。
-          </p>
-          <div className="mt-6 grid gap-4 md:grid-cols-4">
-            <MetricPill label="优势档案" value={talentProfile ? "已生成" : "未生成"} />
-            <MetricPill label="职业方向" value={String(careerNavigation?.navigation.directions.length ?? 0)} />
-            <MetricPill label="资料库事实" value={String(masterFacts.length)} />
-            <MetricPill label="简历记录" value={String(applicationRecords.length)} />
-          </div>
-        </header>
+    <main className="p-8 max-w-6xl mx-auto w-full">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-[#1f1f1f] mb-2">个人中心</h1>
+        <p className="text-[#666]">管理你的个人资料、简历记录和求职状态</p>
+      </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <ModelProviderStatusCard providers={getAvailableModelProviders()} />
-          <SelfUseReadinessCard
-            applicationRecordCount={applicationRecords.length}
-            fixturePdfCount={fixturePdfCount}
-            hasFixtureReport={existsSync(reportPath)}
-            interviewPrepCount={interviewPrepCount}
-          />
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <StatCard label="优势档案" value={talentProfile ? "已生成" : "未生成"} />
+        <StatCard label="职业方向" value={String(careerNavigation?.navigation.directions.length ?? 0)} />
+        <StatCard label="资料库事实" value={String(masterFacts.length)} />
+        <StatCard label="简历版本" value={String(resumeVersions.length)} />
+      </div>
+
+      {/* Info Cards */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <InfoCard
+          actionHref="/talent"
+          actionLabel="继续发现自己"
+          items={
+            talentProfile
+              ? [talentProfile.profile.headline, talentProfile.profile.confidenceNote]
+              : ["还没有保存的发现自己结果。"]
+          }
+          title="我的优势档案"
+        />
+        <InfoCard
+          actionHref="/talent"
+          actionLabel="查看职业方向"
+          items={
+            careerNavigation
+              ? careerNavigation.navigation.directions.map((d) => d.label)
+              : ["还没有确认的职业方向。"]
+          }
+          title="我的职业方向"
+        />
+        <InfoCard
+          actionHref="/master"
+          actionLabel="打开资料库详情"
+          items={
+            masterFacts.length > 0
+              ? masterFacts.slice(0, 4).map((f) => f.title)
+              : ["资料库里还没有确认过的经历事实。"]
+          }
+          title="我的资料库"
+        />
+        <ResumeLibraryCard
+          applicationRecordCount={applicationRecords.length}
+          resumeVersions={resumeVersions.slice(0, 4)}
+        />
+      </div>
+
+      {/* Recent Resume Versions */}
+      <section className="mt-8 bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] p-6">
+        <div className="flex items-end justify-between gap-4 mb-6">
+          <div>
+            <p className="text-xs text-[#666] uppercase tracking-wider">最近简历版本</p>
+            <h2 className="mt-2 text-xl font-semibold text-[#1f1f1f]">最近保存和导出的简历</h2>
+          </div>
+          <Link
+            href="/applications/new"
+            className="inline-flex rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-[#1f1f1f] transition hover:border-[#1677ff] hover:text-[#1677ff]"
+          >
+            新建一版简历
+          </Link>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <InfoCard
-            actionHref="/talent"
-            actionLabel="继续发现自己"
-            items={
-              talentProfile
-                ? [talentProfile.profile.headline, talentProfile.profile.confidenceNote]
-                : ["还没有保存的发现自己结果。"]
-            }
-            title="我的优势档案"
-          />
-          <InfoCard
-            actionHref="/talent"
-            actionLabel="查看职业方向"
-            items={
-              careerNavigation
-                ? careerNavigation.navigation.directions.map((direction) => direction.label)
-                : ["还没有确认的职业方向。"]
-            }
-            title="我的职业方向"
-          />
-          <InfoCard
-            actionHref="/master"
-            actionLabel="打开资料库详情"
-            items={
-              masterFacts.length > 0
-                ? masterFacts.slice(0, 4).map((fact) => fact.title)
-                : ["资料库里还没有确认过的经历事实。"]
-            }
-            title="我的资料库"
-          />
-          <InfoCard
-            actionHref="/applications/new"
-            actionLabel="继续修改简历"
-            items={
-              applicationRecords.length > 0
-                ? applicationRecords.slice(0, 4).map((record) => `${record.company} · ${record.jobTitle}`)
-                : ["还没有生成过简历版本或申请记录。"]
-            }
-            title="我的简历与申请"
-          />
-        </div>
-
-        <section className="rounded-[1.75rem] border border-line bg-white/85 p-6 shadow-card">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-slate-500">最近简历版本</p>
-              <h2 className="mt-3 text-2xl font-semibold">最近导出和投递过的简历</h2>
-            </div>
-            <Link
-              className="inline-flex rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-accent hover:text-accent"
-              href="/applications/new"
-            >
-              新建一版简历
-            </Link>
-          </div>
-
-          {applicationRecords.length > 0 ? (
-            <div className="mt-6 grid gap-4">
-              {applicationRecords.slice(0, 6).map((record) => (
-                <article key={record.id} className="rounded-[1.35rem] border border-line bg-paper p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <h3 className="text-xl font-semibold text-slate-900">{record.company}</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-700">{record.jobTitle}</p>
-                      <div className="mt-3 flex flex-wrap gap-2 text-xs uppercase tracking-[0.18em] text-slate-500">
-                        <span className="rounded-full bg-white px-3 py-1">{record.acceptedSuggestionCount} accepted</span>
-                        <span className="rounded-full bg-white px-3 py-1">{record.reusedMasterFacts.length} facts reused</span>
-                        <span className="rounded-full bg-white px-3 py-1">{formatAppliedAt(record.appliedAt)}</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <a
-                        className="inline-flex rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-accent hover:text-accent"
-                        href={`/applications/${record.draftId}/record`}
-                      >
-                        查看记录
-                      </a>
-                      <a
-                        className="inline-flex rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-accent hover:text-accent"
-                        href={`/applications/${record.draftId}/preview`}
-                      >
-                        打开预览
-                      </a>
-                      <a
-                        className="inline-flex rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-accent hover:text-accent"
-                        href={`/applications/${record.draftId}`}
-                      >
-                        继续修改
-                      </a>
+        {resumeVersions.length > 0 ? (
+          <div className="grid gap-4">
+            {resumeVersions.slice(0, 6).map((version) => (
+              <article key={version.id} className="rounded-xl border border-gray-100 bg-gray-50 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-[#1f1f1f]">{version.title}</h3>
+                    <p className="mt-1 text-sm text-[#666]">{version.targetTitle}</p>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#666]">
+                      <span className="rounded-full bg-white px-3 py-1">{formatResumeVersionSource(version.sourceType)}</span>
+                      <span className="rounded-full bg-white px-3 py-1">{formatDate(version.updatedAt)} 更新</span>
                     </div>
                   </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              actionHref="/applications/new"
-              actionLabel="开始修改简历"
-              body="还没有生成过简历版本。先从修改简历开始，之后这里会自动累积你的版本与投递记录。"
-              title="还没有最近版本"
-            />
-          )}
-        </section>
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      className="inline-flex rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-[#1f1f1f] transition hover:border-[#1677ff] hover:text-[#1677ff]"
+                      href={`/applications/${version.draftId}/preview`}
+                    >
+                      查看简历
+                    </a>
+                    <a
+                      className="inline-flex rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-[#1f1f1f] transition hover:border-[#1677ff] hover:text-[#1677ff]"
+                      href={`/applications/${version.draftId}`}
+                    >
+                      继续修改
+                    </a>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            actionHref="/applications/new"
+            actionLabel="开始修改简历"
+            body="还没有保存过成品简历。先从修改简历开始，保存或导出后这里会自动累积版本。"
+            title="还没有最近版本"
+          />
+        )}
       </section>
     </main>
   );
 }
 
-function MetricPill({ label, value }: { label: string; value: string }) {
+function ResumeLibraryCard({
+  resumeVersions,
+  applicationRecordCount
+}: {
+  resumeVersions: ResumeVersion[];
+  applicationRecordCount: number;
+}) {
   return (
-    <div className="rounded-[1.2rem] border border-line bg-paper px-4 py-4">
-      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-slate-900">{value}</p>
+    <section className="bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-[#1f1f1f]">我的简历与申请</h2>
+          <p className="mt-1 text-sm text-[#666]">{applicationRecordCount} 条申请记录</p>
+        </div>
+        <Link
+          className="inline-flex rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-[#1f1f1f] transition hover:border-[#1677ff] hover:text-[#1677ff]"
+          href="/applications/new"
+        >
+          新建简历
+        </Link>
+      </div>
+
+      {resumeVersions.length > 0 ? (
+        <div className="mt-4 grid gap-3">
+          {resumeVersions.map((version) => (
+            <article key={version.id} className="rounded-lg bg-gray-50 px-4 py-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-[#1f1f1f]">{version.title}</p>
+                  <p className="mt-1 text-xs text-[#666]">{formatDate(version.updatedAt)} 更新</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    className="inline-flex rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#1f1f1f] transition hover:border-[#1677ff] hover:text-[#1677ff]"
+                    href={`/applications/${version.draftId}/preview` as Route}
+                  >
+                    查看简历
+                  </Link>
+                  <Link
+                    className="inline-flex rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#1f1f1f] transition hover:border-[#1677ff] hover:text-[#1677ff]"
+                    href={`/applications/${version.draftId}` as Route}
+                  >
+                    继续修改
+                  </Link>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-lg bg-gray-50 px-4 py-3 text-sm text-[#666]">
+          保存或导出简历后，这里会显示可查看、可继续修改的简历版本。
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] px-4 py-4">
+      <p className="text-xs text-[#666] uppercase tracking-wider">{label}</p>
+      <p className="mt-2 text-lg font-semibold text-[#1f1f1f]">{value}</p>
     </div>
   );
 }
@@ -180,22 +207,23 @@ function InfoCard({
 }: {
   title: string;
   items: string[];
-  actionHref: Route;
+  actionHref?: string;
   actionLabel: string;
 }) {
+  const href = actionHref ?? "#";
   return (
-    <section className="rounded-[1.75rem] border border-line bg-white/85 p-6 shadow-card">
-      <h2 className="text-2xl font-semibold">{title}</h2>
-      <ul className="mt-4 grid gap-3 text-sm leading-6 text-slate-700">
+    <section className="bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] p-6">
+      <h2 className="text-lg font-semibold text-[#1f1f1f]">{title}</h2>
+      <ul className="mt-4 grid gap-3 text-sm text-[#666]">
         {items.map((item, index) => (
-          <li key={`${title}-${index}`} className="rounded-[1.1rem] bg-paper px-4 py-3">
+          <li key={`${title}-${index}`} className="rounded-lg bg-gray-50 px-4 py-3">
             {item}
           </li>
         ))}
       </ul>
       <Link
-        className="mt-5 inline-flex rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-accent hover:text-accent"
-        href={actionHref}
+        className="mt-5 inline-flex rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-[#1f1f1f] transition hover:border-[#1677ff] hover:text-[#1677ff]"
+        href={href as Route}
       >
         {actionLabel}
       </Link>
@@ -211,16 +239,16 @@ function EmptyState({
 }: {
   title: string;
   body: string;
-  actionHref: Route;
+  actionHref: string;
   actionLabel: string;
 }) {
   return (
-    <div className="mt-6 rounded-[1.35rem] border border-dashed border-line bg-paper p-5">
-      <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-      <p className="mt-3 text-sm leading-6 text-slate-700">{body}</p>
+    <div className="mt-6 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-5">
+      <h3 className="text-lg font-semibold text-[#1f1f1f]">{title}</h3>
+      <p className="mt-3 text-sm text-[#666]">{body}</p>
       <Link
-        className="mt-4 inline-flex rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-accent hover:text-accent"
-        href={actionHref}
+        className="mt-4 inline-flex rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-[#1f1f1f] transition hover:border-[#1677ff] hover:text-[#1677ff]"
+        href={actionHref as Route}
       >
         {actionLabel}
       </Link>
@@ -228,38 +256,26 @@ function EmptyState({
   );
 }
 
-function formatAppliedAt(value: string) {
-  if (!value) {
-    return "unknown";
+function formatResumeVersionSource(sourceType: ResumeVersion["sourceType"]) {
+  if (sourceType === "pdf_export") {
+    return "已导出 PDF";
   }
 
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
+  if (sourceType === "snapshot_generation") {
+    return "已生成预览";
+  }
+
+  return "已保存";
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
     return value;
   }
 
-  return parsed.toISOString().slice(0, 10);
-}
-
-async function countFixturePdfs(rootDir: string) {
-  if (!existsSync(rootDir)) {
-    return 0;
-  }
-
-  const entries = await readdir(rootDir, { withFileTypes: true });
-  let count = 0;
-
-  for (const entry of entries) {
-    const entryPath = path.join(rootDir, entry.name);
-    if (entry.isDirectory()) {
-      count += await countFixturePdfs(entryPath);
-      continue;
-    }
-
-    if (entry.isFile() && entry.name.toLowerCase().endsWith(".pdf")) {
-      count += 1;
-    }
-  }
-
-  return count;
+  return date.toLocaleDateString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit"
+  });
 }

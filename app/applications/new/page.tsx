@@ -1,3 +1,12 @@
+import Link from "next/link";
+import type { Route } from "next";
+import {
+  ArrowRight,
+  FileText,
+  Sparkles,
+  Target,
+  Upload
+} from "lucide-react";
 import { getDefaultUserContext } from "@/lib/default-user";
 import { getApplicationDraftDefaults } from "@/lib/services/talent/application-draft-defaults";
 import { getCareerLaneCallout } from "@/lib/services/talent/career-lane-callout";
@@ -5,7 +14,6 @@ import {
   getLatestConfirmedCareerNavigationForTalentProfile,
   getLatestConfirmedTalentProfile
 } from "@/lib/services/talent/talent-profile-service";
-import { NewApplicationForm } from "@/components/applications/new-application-form";
 
 export const dynamic = "force-dynamic";
 
@@ -13,70 +21,106 @@ type NewApplicationPageProps = {
   searchParams?: Promise<{
     lane?: string;
     role?: string;
+    mode?: string;
   }>;
 };
 
 export default async function NewApplicationPage({ searchParams }: NewApplicationPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const lane = resolvedSearchParams?.lane;
-  const role = resolvedSearchParams?.role;
-  const { userId } = getDefaultUserContext();
-  const talentProfile = await getLatestConfirmedTalentProfile(userId);
-  const careerNavigation = talentProfile
-    ? await getLatestConfirmedCareerNavigationForTalentProfile(userId, talentProfile.id)
-    : null;
-  const laneCallout = getCareerLaneCallout({
-    lane,
-    talentProfile,
-    careerNavigation
-  });
-  const draftDefaults = getApplicationDraftDefaults({
-    lane,
-    role,
-    talentProfile,
-    careerNavigation
-  });
+  const mode = resolvedSearchParams?.mode;
+
+  if (mode === "create") {
+    const { default: CreateResumeFlow } = await import("./create-resume-flow");
+    return <CreateResumeFlow />;
+  }
+
+  if (mode === "upload") {
+    const { default: UploadResumeFlow } = await import("./upload-resume-flow");
+    return <UploadResumeFlow />;
+  }
+
+  if (mode === "jd") {
+    const { JdCustomizeFlow } = await import("./jd-customize-flow");
+    return <JdCustomizeFlow searchParams={resolvedSearchParams} />;
+  }
 
   return (
-    <main className="p-8 max-w-7xl mx-auto w-full h-full flex flex-col">
+    <main className="p-8 max-w-6xl mx-auto w-full">
       <div className="mb-8">
-        <p className="text-sm uppercase tracking-[0.28em] text-accent">job-apply / 岗位定制</p>
-        <h1 className="mt-3 text-3xl font-bold text-gray-900 md:text-4xl">
-          先判断岗位值不值得投，再生成一版可导出的快照简历。
-        </h1>
-        <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-          当前工作台严格参考 `job-apply` 原型：先做差距分析，再给出逐条建议，最后生成不污染主档的岗位快照。天赋发现会增强判断，但不会阻塞第一条投递链路。
-        </p>
-
-        {laneCallout ? (
-          <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm leading-6 text-blue-900">
-            <p className="font-bold flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>
-              已选方向：{laneCallout.laneLabel}
-            </p>
-            <p className="mt-1 opacity-90">优势提醒：{laneCallout.strengthHint}</p>
-            <p className="opacity-90">风险提醒：{laneCallout.riskHint}</p>
-          </div>
-        ) : null}
-
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-black/5 bg-white/80 px-5 py-4 shadow-card">
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Step 1</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">输入 JD 与现有简历，先拿到差距分析与匹配判断。</p>
-          </div>
-          <div className="rounded-2xl border border-black/5 bg-white/80 px-5 py-4 shadow-card">
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Step 2</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">逐条查看改写建议，新增事实先进入待确认队列。</p>
-          </div>
-          <div className="rounded-2xl border border-black/5 bg-white/80 px-5 py-4 shadow-card">
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Step 3</p>
-            <p className="mt-2 text-sm leading-6 text-slate-700">同步至预览稿并完成最终导出确认。</p>
-          </div>
-        </div>
+        <h1 className="text-3xl font-bold text-[#1f1f1f] mb-2">简历准备</h1>
+        <p className="text-[#666]">选择一种方式开始准备你的求职简历</p>
       </div>
 
-      <div className="flex-1 min-h-0">
-        <NewApplicationForm draftDefaults={draftDefaults} selectedLane={lane} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Card 1: 创建简历 */}
+        <Link
+          href={"/applications/new?mode=create" as Route}
+          className="group bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] p-6 hover:shadow-lg transition-all border-2 border-transparent hover:border-[#1677ff]/30"
+        >
+          <div className="w-14 h-14 bg-blue-50 rounded-xl flex items-center justify-center mb-5">
+            <FileText className="text-[#1677ff]" size={28} />
+          </div>
+          <h2 className="text-xl font-semibold text-[#1f1f1f] mb-3">简历创建</h2>
+          <p className="text-sm text-[#666] mb-6 leading-relaxed">
+            从零开始填写基本信息、教育经历、工作经历、项目经历，AI 帮你生成一份专业简历。
+          </p>
+          <div className="flex items-center gap-2 text-[#1677ff] text-sm font-medium">
+            <span>开始创建</span>
+            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
+        {/* Card 2: 已有简历 AI 优化 */}
+        <Link
+          href={"/applications/new?mode=upload" as Route}
+          className="group bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] p-6 hover:shadow-lg transition-all border-2 border-transparent hover:border-[#1677ff]/30"
+        >
+          <div className="w-14 h-14 bg-purple-50 rounded-xl flex items-center justify-center mb-5">
+            <Upload className="text-purple-500" size={28} />
+          </div>
+          <h2 className="text-xl font-semibold text-[#1f1f1f] mb-3">已有简历 AI 优化</h2>
+          <p className="text-sm text-[#666] mb-6 leading-relaxed">
+            上传 PDF / DOCX / 图片简历，AI 自动解析并优化语言表达，突出核心优势。
+          </p>
+          <div className="flex items-center gap-2 text-[#1677ff] text-sm font-medium">
+            <span>上传简历</span>
+            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
+        {/* Card 3: JD 定制简历 */}
+        <Link
+          href={"/applications/new?mode=jd" as Route}
+          className="group bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] p-6 hover:shadow-lg transition-all border-2 border-transparent hover:border-[#1677ff]/30"
+        >
+          <div className="w-14 h-14 bg-green-50 rounded-xl flex items-center justify-center mb-5">
+            <Target className="text-green-600" size={28} />
+          </div>
+          <h2 className="text-xl font-semibold text-[#1f1f1f] mb-3">JD 定制简历</h2>
+          <p className="text-sm text-[#666] mb-6 leading-relaxed">
+            输入或上传目标岗位 JD，AI 分析差距并给出改写建议，生成针对性定制简历。
+          </p>
+          <div className="flex items-center gap-2 text-[#1677ff] text-sm font-medium">
+            <span>开始定制</span>
+            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+      </div>
+
+      {/* AI Optimization Hint */}
+      <div className="mt-8 bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] p-6">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-lg bg-[#1677ff]/10 flex items-center justify-center shrink-0">
+            <Sparkles className="text-[#1677ff]" size={20} />
+          </div>
+          <div>
+            <h3 className="font-semibold text-[#1f1f1f] mb-1">AI 小助手</h3>
+            <p className="text-sm text-[#666] leading-relaxed">
+              无论选择哪种方式，AI 都会在简历生成过程中帮你优化语言表达，突出核心优势，提高简历通过率。
+              如果你已有天赋画像，AI 还会结合你的优势特质进行个性化推荐。
+            </p>
+          </div>
+        </div>
       </div>
     </main>
   );

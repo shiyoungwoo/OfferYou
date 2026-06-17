@@ -44,10 +44,21 @@ export function ModelProviderStatusCard({ providers }: ModelProviderStatusCardPr
 
 function ProviderCapabilitySummary({ providerKey }: { providerKey: ModelProviderInfo["key"] }) {
   const capability = getModelProviderCapability(providerKey);
+  const capabilityLabel =
+    capability.level === "vision_optional"
+      ? "多模态模型"
+      : capability.level === "text_only"
+        ? "文本模型"
+        : "规则兜底";
 
   return (
     <div className="mt-3 rounded-[1rem] border border-dashed border-line bg-white px-4 py-3">
-      <p className="text-sm font-semibold text-slate-900">{capability.title}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-sm font-semibold text-slate-900">{capability.title}</p>
+        <span className="rounded-full border border-line bg-paper px-2.5 py-1 text-xs font-semibold text-slate-600">
+          {capabilityLabel}
+        </span>
+      </div>
       <p className="mt-1 text-sm leading-6 text-slate-600">{capability.description}</p>
       <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
         <span>适合：{capability.bestFor.join("、")}</span>

@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { callGemini } from "@/lib/ai/gemini-client";
 
 vi.mock("@/lib/ai/gemini-client", () => ({
-  callGemini: vi.fn(),
-  callGeminiJSON: vi.fn()
+  callGemini: vi.fn()
 }));
 
 describe("model gateway", () => {
@@ -13,6 +12,9 @@ describe("model gateway", () => {
     vi.resetAllMocks();
     delete process.env.GEMINI_API_KEY;
     delete process.env.GEMINI_MODEL;
+    delete process.env.GEMINI_MODEL_SIMPLE;
+    delete process.env.GEMINI_MODEL_COMPLEX;
+    delete process.env.GEMINI_MODEL_VISION;
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;
     delete process.env.OPENAI_MODEL;
@@ -21,40 +23,21 @@ describe("model gateway", () => {
     delete process.env.MIMO_MODEL;
   });
 
-  it("lists gemini, OpenAI compatible, and deterministic fallback providers", async () => {
+  it("lists all providers including CLI providers", async () => {
     const { getAvailableModelProviders } = await import("@/lib/ai/model-gateway");
 
     const providers = getAvailableModelProviders();
+    const keys = providers.map((p) => p.key);
 
-    expect(providers).toEqual([
-      {
-        key: "gemini",
-        label: "Gemini",
-        configured: false,
-        authenticated: false,
-        callable: false,
-        available: false,
-        default: false
-      },
-      {
-        key: "openai_compatible",
-        label: "OpenAI 兼容模式",
-        configured: false,
-        authenticated: false,
-        callable: false,
-        available: false,
-        default: false
-      },
-      {
-        key: "deterministic_fallback",
-        label: "Deterministic Fallback",
-        configured: false,
-        authenticated: false,
-        callable: true,
-        available: true,
-        default: true
-      }
-    ]);
+    expect(keys).toContain("gemini");
+    expect(keys).toContain("openai_compatible");
+    expect(keys).toContain("antigravity_cli");
+    expect(keys).toContain("codex_cli");
+    expect(keys).toContain("deterministic_fallback");
+
+    const fallback = providers.find((p) => p.key === "deterministic_fallback");
+    expect(fallback?.callable).toBe(true);
+    expect(fallback?.default).toBe(true);
   });
 
   it("returns human-readable runtime status for unavailable providers", async () => {

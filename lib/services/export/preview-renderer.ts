@@ -573,7 +573,7 @@ function renderSection(section: ResumeDocumentSection, className = "standard") {
 }
 
 function renderTextItem(text: string) {
-  const colonMatch = text.match(/^\s*([\u4e00-\u9fa5A-Za-z0-9＋+&/（）()·\s]{2,24})\s*[:：]\s*(.+)$/su);
+  const colonMatch = text.match(/^\s*([\u4e00-\u9fa5A-Za-z0-9＋+&/（）()·\s→>\-]{2,24})\s*[:：]\s*(.+)$/su);
   if (!colonMatch) {
     return escapeHtml(text);
   }

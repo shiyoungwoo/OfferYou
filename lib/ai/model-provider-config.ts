@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { ModelTaskKey } from "@/lib/ai/model-task-config";
-import { hasResolvedOpenAICompatibleConfig, resolveOpenAICompatibleModelConfig } from "@/lib/ai/model-routing";
+import { getStorageRoot } from "@/lib/runtime/storage-root";
+import { hasResolvedGeminiConfig, hasResolvedOpenAICompatibleConfig, resolveGeminiModelConfig, resolveOpenAICompatibleModelConfig } from "@/lib/ai/model-routing";
 
-export type ModelProviderKey = "gemini" | "openai_compatible" | "deterministic_fallback";
+export type ModelProviderKey = "gemini" | "openai_compatible" | "antigravity_cli" | "codex_cli" | "deterministic_fallback";
 
 export type ModelProviderCapabilityLevel = "text_only" | "vision_optional" | "fallback_only";
 
@@ -33,15 +36,65 @@ export function hasOpenAICompatibleConfig() {
   return hasResolvedOpenAICompatibleConfig();
 }
 
+export function hasAntigravityCliConfig() {
+  // Check if agy binary exists (we just check if the env is configured or default works)
+  return Boolean(process.env.ANTIGRAVITY_CLI_BIN ?? process.env.AGY_BIN ?? "agy");
+}
+
+export function hasCodexCliConfig() {
+  return Boolean(process.env.CODEX_CLI_BIN ?? "codex");
+}
+
+let _prefCache: { provider: ModelProviderKey; at: number } | null = null;
+const PREF_CACHE_TTL_MS = 3_000;
+
+function readUserProviderPref(): ModelProviderKey | null {
+  const now = Date.now();
+  if (_prefCache && now - _prefCache.at < PREF_CACHE_TTL_MS) {
+    return _prefCache.provider;
+  }
+
+  try {
+    const prefPath = path.join(getStorageRoot(), "model-provider-pref.json");
+    const raw = readFileSync(prefPath, "utf-8");
+    const data = JSON.parse(raw);
+    if (data.provider === "gemini" || data.provider === "openai_compatible" || data.provider === "antigravity_cli" || data.provider === "codex_cli") {
+      _prefCache = { provider: data.provider, at: now };
+      return data.provider;
+    }
+  } catch {}
+
+  return null;
+}
+
+export function invalidateProviderPrefCache() {
+  _prefCache = null;
+}
+
 export function getDefaultModelProvider(_task?: ModelTaskKey): ModelProviderKey {
+  // 1. 用户通过 UI 切换的偏好（最高优先级）
+  const userPref = readUserProviderPref();
+  if (userPref === "gemini" && hasGeminiApiKey()) return "gemini";
+  if (userPref === "openai_compatible" && hasOpenAICompatibleConfig()) return "openai_compatible";
+  if (userPref === "antigravity_cli" && hasAntigravityCliConfig()) return "antigravity_cli";
+  if (userPref === "codex_cli" && hasCodexCliConfig()) return "codex_cli";
+
+  // 2. 环境变量默认值
   const envDefault = process.env.DEFAULT_MODEL_PROVIDER as ModelProviderKey;
   if (envDefault === "gemini" && hasGeminiApiKey()) return "gemini";
   if (envDefault === "openai_compatible" && hasOpenAICompatibleConfig()) return "openai_compatible";
+  if (envDefault === "antigravity_cli" && hasAntigravityCliConfig()) return "antigravity_cli";
+  if (envDefault === "codex_cli" && hasCodexCliConfig()) return "codex_cli";
   if (envDefault === "openai_compatible") return "deterministic_fallback";
   if (envDefault === "deterministic_fallback") return "deterministic_fallback";
 
+  // 3. 自动检测
   if (hasOpenAICompatibleConfig()) {
     return "openai_compatible";
+  }
+
+  if (hasGeminiApiKey()) {
+    return "gemini";
   }
 
   return "deterministic_fallback";
@@ -50,12 +103,14 @@ export function getDefaultModelProvider(_task?: ModelTaskKey): ModelProviderKey 
 export function getAvailableModelProviders(): ModelProviderInfo[] {
   const geminiAvailability = getModelProviderAvailability("gemini");
   const openAICompatibleAvailability = getModelProviderAvailability("openai_compatible");
+  const antigravityAvailability = getModelProviderAvailability("antigravity_cli");
+  const codexAvailability = getModelProviderAvailability("codex_cli");
   const defaultProvider = getDefaultModelProvider();
 
   return [
     {
       key: "gemini",
-      label: "Gemini",
+      label: getGeminiProviderLabel(),
       configured: geminiAvailability.configured,
       authenticated: geminiAvailability.authenticated,
       callable: geminiAvailability.callable,
@@ -70,6 +125,24 @@ export function getAvailableModelProviders(): ModelProviderInfo[] {
       callable: openAICompatibleAvailability.callable,
       available: openAICompatibleAvailability.callable,
       default: defaultProvider === "openai_compatible"
+    },
+    {
+      key: "antigravity_cli",
+      label: "Antigravity CLI",
+      configured: antigravityAvailability.configured,
+      authenticated: antigravityAvailability.authenticated,
+      callable: antigravityAvailability.callable,
+      available: antigravityAvailability.callable,
+      default: defaultProvider === "antigravity_cli"
+    },
+    {
+      key: "codex_cli",
+      label: "Codex CLI",
+      configured: codexAvailability.configured,
+      authenticated: codexAvailability.authenticated,
+      callable: codexAvailability.callable,
+      available: codexAvailability.callable,
+      default: defaultProvider === "codex_cli"
     },
     {
       key: "deterministic_fallback",
@@ -91,6 +164,16 @@ export function getModelProviderAvailability(provider: Exclude<ModelProviderKey,
       authenticated: configured,
       callable: configured
     };
+  }
+
+  if (provider === "antigravity_cli") {
+    const configured = hasAntigravityCliConfig();
+    return { configured, authenticated: configured, callable: configured };
+  }
+
+  if (provider === "codex_cli") {
+    const configured = hasCodexCliConfig();
+    return { configured, authenticated: configured, callable: configured };
   }
 
   const configured = hasOpenAICompatibleConfig();
@@ -122,10 +205,30 @@ export function getModelProviderCapability(provider: ModelProviderKey): ModelPro
   if (provider === "gemini") {
     return {
       level: "vision_optional",
-      title: "多模态模型",
-      description: "适合校准 JD 截图、PDF 页面截图和 OCR 错误；如果只传文本，也可以作为文本模型使用。",
-      bestFor: ["截图理解", "OCR 校准", "复杂版面恢复"],
-      limitations: ["需要可用 Key", "效果依赖输入是否包含图片或截图"]
+      title: "Google Gemini",
+      description: "按任务分层：简单任务使用 gemini-3.5-flash（快、智能），复杂推理使用 gemini-3.1-pro（最强），视觉任务使用 gemini-3.5-flash。支持原生 JSON mode。",
+      bestFor: ["岗位匹配", "简历改写", "面试准备", "截图理解", "OCR 校准"],
+      limitations: ["需要配置有效模型密钥", "3.1 Pro 为 preview 状态"]
+    };
+  }
+
+  if (provider === "antigravity_cli") {
+    return {
+      level: "text_only" as const,
+      title: "Antigravity CLI",
+      description: "调用本机已授权的 Antigravity CLI (agy)，使用 Gemini 系列模型。适合文本生成和结构化输出。",
+      bestFor: ["简历改写", "面试准备", "天赋发掘"],
+      limitations: ["不直接读取图片", "需要本机安装 agy CLI 并完成登录"]
+    };
+  }
+
+  if (provider === "codex_cli") {
+    return {
+      level: "text_only" as const,
+      title: "Codex CLI",
+      description: "调用本机已授权的 Codex CLI，使用 OpenAI 系列模型。只读模式，不修改文件。",
+      bestFor: ["简历改写", "面试回答优化", "职业规划文本组织"],
+      limitations: ["不直接读取图片", "不允许在 provider 模式修改文件"]
     };
   }
 
@@ -136,6 +239,12 @@ export function getModelProviderCapability(provider: ModelProviderKey): ModelPro
     bestFor: ["离线兜底", "基础字段提取"],
     limitations: ["不能理解 JD 深层要求", "不能保证简历定制质量"]
   };
+}
+
+function getGeminiProviderLabel() {
+  const config = resolveGeminiModelConfig();
+  if (!config) return "Google Gemini";
+  return `Google Gemini (${config.model})`;
 }
 
 function getOpenAICompatibleProviderLabel() {

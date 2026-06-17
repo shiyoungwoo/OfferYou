@@ -1,10 +1,10 @@
-import path from "node:path";
 import { NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
+import { getStorageRoot } from "@/lib/runtime/storage-root";
 import { readApplicationRecord } from "@/lib/services/applications/application-record-service";
 import { LocalStorageAdapter } from "@/lib/storage/local-storage-adapter";
 
-const storageAdapter = new LocalStorageAdapter(path.join(process.cwd(), "storage"));
+function getStorageAdapter() { return new LocalStorageAdapter(getStorageRoot()); }
 
 export async function GET(
   request: Request,
@@ -18,7 +18,7 @@ export async function GET(
   }
 
   try {
-    storageAdapter.assertPathAllowed(record.exportStoragePath);
+    getStorageAdapter().assertPathAllowed(record.exportStoragePath);
     const fileBuffer = await readFile(record.exportStoragePath);
 
     // Provide a safe filename using the company name if available

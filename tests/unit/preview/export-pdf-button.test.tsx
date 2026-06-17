@@ -7,6 +7,7 @@ describe("ExportPdfButton", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   });
 
   it("renders the combined confirmation and export action", () => {
@@ -15,14 +16,14 @@ describe("ExportPdfButton", () => {
     expect(screen.getByRole("button", { name: "确认内容并导出 PDF" })).toHaveProperty("disabled", false);
   });
 
-  it("shows the record link after successful export", async () => {
+  it("shows the PDF download link after successful export", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
           storagePath: "/tmp/resume.pdf",
-          recordPath: "/applications/draft-1/record"
+          downloadPath: "/api/drafts/draft-1/export?path=%2Ftmp%2Fresume.pdf"
         })
       })
     );
@@ -32,8 +33,8 @@ describe("ExportPdfButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认内容并导出 PDF" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: "查看这次简历记录" }).getAttribute("href")).toBe(
-        "/applications/draft-1/record"
+      expect(screen.getByRole("link", { name: "重新下载 PDF" }).getAttribute("href")).toBe(
+        "/api/drafts/draft-1/export?path=%2Ftmp%2Fresume.pdf"
       );
     });
   });
@@ -43,7 +44,7 @@ describe("ExportPdfButton", () => {
       ok: true,
       json: async () => ({
         storagePath: "/tmp/resume.pdf",
-        recordPath: "/applications/draft-1/record"
+        downloadPath: "/api/drafts/draft-1/export?path=%2Ftmp%2Fresume.pdf"
       })
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -92,7 +93,7 @@ describe("ExportPdfButton", () => {
       ok: true,
       json: async () => ({
         storagePath: "/tmp/resume.pdf",
-        recordPath: "/applications/draft-1/record"
+        downloadPath: "/api/drafts/draft-1/export?path=%2Ftmp%2Fresume.pdf"
       })
     });
     vi.stubGlobal("fetch", fetchMock);

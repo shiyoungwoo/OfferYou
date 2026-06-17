@@ -8,9 +8,9 @@ import {
 import { readSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
 import type { ResumeDocument } from "@/lib/document/resume-document";
 import { parseJsonPayload } from "@/lib/services/persistence/json-payload";
-import { callModelJSON } from "@/lib/ai/model-gateway";
+import { callModelJSON, callModelText } from "@/lib/ai/model-gateway";
 
-export type InterviewQuestionSourceType = "jd" | "snapshot" | "master_fact" | "inferred";
+export type InterviewQuestionSourceType = "jd" | "snapshot" | "master_fact" | "inferred" | "basic";
 
 export type InterviewQuestion = {
   id: string;
@@ -47,9 +47,65 @@ type ModelInterviewPrepOutput = {
   }>;
 };
 
+export async function optimizeInterviewAnswerDraft(input: {
+  company: string;
+  jobTitle: string;
+  questionText: string;
+  answerDraft: string;
+  sourceType?: InterviewQuestionSourceType;
+  sourceRef?: string;
+}): Promise<{
+  answerDraft: string;
+  generationMode: InterviewPrepRecord["generationMode"];
+  modelProvider?: string;
+  riskNote?: string;
+}> {
+  const originalDraft = input.answerDraft.trim();
+  const systemPrompt = [
+    "你是一位面试教练，负责把候选人的答案草稿优化成真实、清晰、可直接练习的面试回答。",
+    "",
+    "规则：",
+    "- 不编造公司、学历、项目结果、指标或经历。",
+    "- 如果原答案信息不足，可以给出回答框架和需要补充的要点，但不能虚构事实。",
+    "- 优先使用 STAR / 结论先行 / 业务价值表达。",
+    "- 只输出优化后的答案正文，不要解释，不要 Markdown 标题。"
+  ].join("\n");
+  const userPrompt = [
+    `公司：${input.company}`,
+    `岗位：${input.jobTitle}`,
+    `问题：${input.questionText}`,
+    `问题来源：${renderInterviewQuestionSourceLabel(input.sourceType ?? "inferred")}${input.sourceRef ? ` · ${input.sourceRef}` : ""}`,
+    "",
+    "当前答案草稿：",
+    originalDraft || "（用户还没有写答案，请生成一个不编造事实的回答框架，并标出需要补充的个人经历要点。）"
+  ].join("\n");
+
+  const result = await callModelText({
+    systemPrompt,
+    userPrompt,
+    task: "interview"
+  });
+  const optimized = result.data?.trim();
+
+  if (!optimized || result.generationMode === "deterministic_fallback") {
+    return {
+      answerDraft: originalDraft,
+      generationMode: "deterministic_fallback",
+      modelProvider: result.provider,
+      riskNote: `AI 优化失败，已保留原答案。${result.fallbackReason ?? "请稍后重试。"}`
+    };
+  }
+
+  return {
+    answerDraft: optimized,
+    generationMode: result.generationMode as InterviewPrepRecord["generationMode"],
+    modelProvider: result.provider
+  };
+}
+
 async function buildInterviewPrepWithModel(input: {
   record: NonNullable<Awaited<ReturnType<typeof readApplicationRecord>>>;
-  draft: NonNullable<Awaited<ReturnType<typeof readWorkspaceDraft>>>;
+  draft: Awaited<ReturnType<typeof readWorkspaceDraft>>;
   snapshot: ResumeDocument | null;
   prepId: string;
 }): Promise<Pick<InterviewPrepRecord, "selfIntroDraft" | "questions" | "generationMode" | "riskNotes" | "modelProvider">> {
@@ -61,6 +117,7 @@ async function buildInterviewPrepWithModel(input: {
     "- 输出 5 到 8 个面试问题。",
     "- 自我介绍控制在 60 到 90 秒。",
     "- 每个问题需标注 sourceType（jd / snapshot / master_fact / inferred）。",
+    "- 没有对应来源时，不得把问题标为 jd / snapshot / master_fact，只能标 inferred。",
     "- 输出合法 JSON，不要 Markdown。"
   ].join("\n");
 
@@ -74,9 +131,10 @@ async function buildInterviewPrepWithModel(input: {
   const userPrompt = [
     `公司：${input.record.company}`,
     `岗位：${input.record.jobTitle}`,
+    getRecordInterviewContext(input.record) ? `用户补充 / 联网资料：\n${getRecordInterviewContext(input.record)}` : "",
     "",
-    `JD 能力要求：${(input.draft.jdInsight?.coreAbilities ?? []).join("、") || "（未解析）"}`,
-    `候选人优势：${(input.draft.analysis?.strengths ?? []).join("、") || "（未解析）"}`,
+    `JD 能力要求：${(input.draft?.jdInsight?.coreAbilities ?? []).join("、") || "（未解析）"}`,
+    `候选人优势：${(input.draft?.analysis?.strengths ?? []).join("、") || "（未解析）"}`,
     "",
     "已确认简历快照内容：",
     snapshotText,
@@ -91,7 +149,7 @@ async function buildInterviewPrepWithModel(input: {
   });
 
   if (!result.data?.selfIntroDraft || !result.data.questions?.length) {
-    throw new Error("Model returned empty interview prep.");
+    throw new Error(result.fallbackReason ?? "Model returned empty interview prep.");
   }
 
   const questions = result.data.questions.slice(0, 8).map((q, index) => ({
@@ -112,9 +170,26 @@ async function buildInterviewPrepWithModel(input: {
   };
 }
 
-export async function createInterviewPrepFromRecord(recordId: string): Promise<InterviewPrepRecord> {
+export async function createInterviewPrepFromRecord(
+  recordId: string,
+  options: { force?: boolean } = {}
+): Promise<InterviewPrepRecord> {
+  const record = await readApplicationRecord(recordId);
+  if (!record) {
+    throw new Error("Application record not found.");
+  }
+
+  const draft = record.draftId ? await readWorkspaceDraft(record.draftId) : null;
+  if (record.draftId && !draft) {
+    throw new Error("Workspace draft not found for the application record.");
+  }
+  const snapshot = record.draftId ? await readSnapshotForDraft(record.draftId) : null;
+  const now = new Date().toISOString();
+  const prepId = `interview-${record.id}`;
+  const evidence = getInterviewEvidenceState({ record, draft, snapshot });
   const existing = await readInterviewPrepForRecord(recordId);
-  if (existing) {
+
+  if (existing && !options.force && !shouldRegenerateUnsafePrep(existing, evidence)) {
     await updateApplicationRecordInterviewPrep({
       recordId,
       interviewPrepId: existing.id,
@@ -123,20 +198,47 @@ export async function createInterviewPrepFromRecord(recordId: string): Promise<I
     return existing;
   }
 
-  const record = await readApplicationRecord(recordId);
-  if (!record) {
-    throw new Error("Application record not found.");
+  if (!evidence.canUseModel) {
+    const prep = buildBasicInterviewPrep({
+      record,
+      prepId,
+      now
+    });
+    await saveInterviewPrep(prep);
+    await updateApplicationRecordInterviewPrep({
+      recordId: record.id,
+      interviewPrepId: prep.id,
+      interviewStatus: "preparing"
+    });
+    return prep;
   }
 
-  const draft = await readWorkspaceDraft(record.draftId);
-  if (!draft) {
-    throw new Error("Workspace draft not found for the application record.");
+  let modelResult: Awaited<ReturnType<typeof buildInterviewPrepWithModel>> | null = null;
+  let modelFailureReason = "";
+  try {
+    modelResult = await buildInterviewPrepWithModel({ record, draft, snapshot, prepId });
+  } catch (error) {
+    modelResult = null;
+    modelFailureReason = error instanceof Error ? error.message : "模型调用失败。";
+    if (process.env.OFFERYOU_DEBUG_AI === "1") {
+      console.error("[InterviewPrep] Model call failed, falling back to templates:", error);
+    }
   }
-  const snapshot = await readSnapshotForDraft(record.draftId);
-  const now = new Date().toISOString();
-  const prepId = `interview-${record.id}`;
 
-  const modelResult = await buildInterviewPrepWithModel({ record, draft, snapshot, prepId }).catch(() => null);
+  if (!modelResult && existing && options.force && isModelGeneratedPrep(existing) && evidence.canUseModel) {
+    const preserved = preserveExistingModelPrepAfterFailure({
+      existing,
+      failureReason: modelFailureReason,
+      now
+    });
+    await saveInterviewPrep(preserved);
+    await updateApplicationRecordInterviewPrep({
+      recordId: record.id,
+      interviewPrepId: preserved.id,
+      interviewStatus: "preparing"
+    });
+    return preserved;
+  }
 
   const selfIntroDraft = modelResult?.selfIntroDraft ?? buildSelfIntroDraft({
     company: record.company,
@@ -145,11 +247,13 @@ export async function createInterviewPrepFromRecord(recordId: string): Promise<I
     snapshot
   });
 
-  const questions = modelResult?.questions ?? buildInterviewQuestions({
-    record,
-    draft,
-    snapshot
-  }, prepId);
+  const questions = modelResult?.questions
+    ? sanitizeModelQuestions(modelResult.questions, evidence)
+    : buildInterviewQuestions({
+        record,
+        draft,
+        snapshot
+      }, prepId);
 
   const prep: InterviewPrepRecord = {
     id: prepId,
@@ -161,7 +265,7 @@ export async function createInterviewPrepFromRecord(recordId: string): Promise<I
     selfIntroDraft,
     questions,
     generationMode: modelResult?.generationMode ?? "deterministic_fallback",
-    riskNotes: modelResult?.riskNotes ?? (modelResult ? undefined : ["模型暂不可用，已使用模板生成面试准备。"]),
+    riskNotes: modelResult?.riskNotes ?? buildFallbackRiskNotes({ modelResult, draft, evidence, modelFailureReason }),
     modelProvider: modelResult?.modelProvider,
     createdAt: now,
     updatedAt: now
@@ -175,6 +279,154 @@ export async function createInterviewPrepFromRecord(recordId: string): Promise<I
   });
 
   return prep;
+}
+
+function isModelGeneratedPrep(prep: InterviewPrepRecord) {
+  return prep.generationMode === "model" || prep.generationMode === "model_repaired";
+}
+
+function preserveExistingModelPrepAfterFailure(input: {
+  existing: InterviewPrepRecord;
+  failureReason: string;
+  now: string;
+}): InterviewPrepRecord {
+  return {
+    ...input.existing,
+    riskNotes: mergeRiskNotes(input.existing.riskNotes, [
+      `本次重新生成失败，已保留上一次 AI 面试准备。${input.failureReason || "请稍后重试。"}`
+    ]),
+    updatedAt: input.now
+  };
+}
+
+function mergeRiskNotes(existing: string[] | undefined, next: string[]) {
+  return Array.from(new Set([...(existing ?? []), ...next].filter(Boolean)));
+}
+
+function buildBasicInterviewPrep(input: {
+  record: NonNullable<Awaited<ReturnType<typeof readApplicationRecord>>>;
+  prepId: string;
+  now: string;
+}): InterviewPrepRecord {
+  const questions: InterviewQuestion[] = [
+    {
+      id: `${input.prepId}-q1`,
+      questionText: "请准备一段 60 秒自我介绍，重点说明过往经历、目标岗位和最想展示的一项能力。",
+      sourceType: "basic",
+      favorite: false,
+      answerDraft: ""
+    },
+    {
+      id: `${input.prepId}-q2`,
+      questionText: `为什么关注 ${input.record.company} 的 ${input.record.jobTitle}？请先补充 JD 或公司资料后再写具体答案。`,
+      sourceType: "basic",
+      favorite: false,
+      answerDraft: ""
+    },
+    {
+      id: `${input.prepId}-q3`,
+      questionText: "作为 AI 产品经理，如何判断一个 AI 能力是否值得产品化？请按用户场景、技术可行性、成本和风险展开。",
+      sourceType: "basic",
+      favorite: false,
+      answerDraft: ""
+    }
+  ];
+
+  return {
+    id: input.prepId,
+    applicationRecordId: input.record.id,
+    draftId: input.record.draftId,
+    company: input.record.company,
+    jobTitle: input.record.jobTitle,
+    candidateName: "OfferYou 用户",
+    selfIntroDraft: [
+      `面试官您好，我正在准备 ${input.record.company} 的 ${input.record.jobTitle} 面试。`,
+      "这是一版基础自我介绍框架，当前还缺少 JD、公司资料或简历快照。",
+      "我会先补充岗位要求和公司信息，再把经历、能力和岗位匹配点讲具体。"
+    ].join("\n"),
+    questions,
+    generationMode: "deterministic_fallback",
+    riskNotes: [
+      "未提供 JD、公司资料或简历快照，系统没有调用模型生成岗位深度问题；当前只保留基础面试准备题。",
+      "要生成可信的岗位问题，需要补充 JD、公司资料，或接入联网研究结果。"
+    ],
+    createdAt: input.now,
+    updatedAt: input.now
+  };
+}
+
+type InterviewEvidenceState = {
+  canUseModel: boolean;
+  hasJD: boolean;
+  hasSnapshot: boolean;
+  hasMasterFacts: boolean;
+  hasSubstantialNotes: boolean;
+};
+
+function getInterviewEvidenceState(input: {
+  record: NonNullable<Awaited<ReturnType<typeof readApplicationRecord>>>;
+  draft: Awaited<ReturnType<typeof readWorkspaceDraft>>;
+  snapshot: ResumeDocument | null;
+}): InterviewEvidenceState {
+  const hasJD = Boolean(input.draft?.jdInsight?.coreAbilities?.length);
+  const hasSnapshot = Boolean(input.snapshot?.sections.some((section) => section.items.length > 0));
+  const hasMasterFacts = Boolean(input.draft?.masterFactsUsed?.length);
+  const hasSubstantialNotes = hasUsefulInterviewNotes(getRecordInterviewContext(input.record));
+
+  return {
+    canUseModel: hasJD || hasSnapshot || hasMasterFacts || hasSubstantialNotes,
+    hasJD,
+    hasSnapshot,
+    hasMasterFacts,
+    hasSubstantialNotes
+  };
+}
+
+function hasUsefulInterviewNotes(notes: string | undefined) {
+  const normalized = notes?.trim() ?? "";
+  if (normalized.length >= 120) {
+    return true;
+  }
+
+  return /JD|岗位要求|任职要求|工作职责|公司信息|公司资料|产品|业务|官网|招聘/i.test(normalized) && normalized.length >= 40;
+}
+
+function getRecordInterviewContext(record: NonNullable<Awaited<ReturnType<typeof readApplicationRecord>>>) {
+  return [
+    record.interviewContextText ? `用户补充资料：\n${record.interviewContextText}` : "",
+    record.interviewResearch?.status === "ready" ? `联网研究摘要：\n${record.interviewResearch.summary}` : "",
+    record.interviewNotes ? `面试备注：\n${record.interviewNotes}` : ""
+  ].filter(Boolean).join("\n\n").trim();
+}
+
+function shouldRegenerateUnsafePrep(prep: InterviewPrepRecord, evidence: InterviewEvidenceState) {
+  if (evidence.canUseModel) {
+    return false;
+  }
+
+  if (prep.generationMode === "model" || prep.generationMode === "model_repaired") {
+    return true;
+  }
+
+  return prep.questions.some((question) => question.sourceType !== "basic");
+}
+
+function sanitizeModelQuestions(questions: InterviewQuestion[], evidence: InterviewEvidenceState): InterviewQuestion[] {
+  return questions.map((question) => {
+    if (question.sourceType === "snapshot" && !evidence.hasSnapshot) {
+      return { ...question, sourceType: "inferred", sourceRef: "未绑定简历快照，已降级为推断" };
+    }
+
+    if (question.sourceType === "master_fact" && !evidence.hasMasterFacts) {
+      return { ...question, sourceType: "inferred", sourceRef: "未绑定事实资料，已降级为推断" };
+    }
+
+    if (question.sourceType === "jd" && !evidence.hasJD && !evidence.hasSubstantialNotes) {
+      return { ...question, sourceType: "inferred", sourceRef: "未提供 JD，已降级为推断" };
+    }
+
+    return question;
+  });
 }
 
 export async function saveInterviewPrep(prep: InterviewPrepRecord) {
@@ -284,13 +536,13 @@ export async function readInterviewPrepForRecord(recordId: string): Promise<Inte
 function buildInterviewQuestions(
   input: {
     record: NonNullable<Awaited<ReturnType<typeof readApplicationRecord>>>;
-    draft: NonNullable<Awaited<ReturnType<typeof readWorkspaceDraft>>>;
+    draft: Awaited<ReturnType<typeof readWorkspaceDraft>>;
     snapshot: ResumeDocument | null;
   },
   prepId: string
 ): InterviewQuestion[] {
-  const strengths = input.draft.analysis?.strengths ?? [];
-  const masterFacts = input.draft.masterFactsUsed ?? [];
+  const strengths = input.draft?.analysis?.strengths ?? [];
+  const masterFacts = input.draft?.masterFactsUsed ?? [];
   const questions: Array<Omit<InterviewQuestion, "id">> = [];
 
   questions.push({
@@ -301,11 +553,28 @@ function buildInterviewQuestions(
     answerDraft: ""
   });
 
-  for (const ability of (input.draft.jdInsight?.coreAbilities ?? []).slice(0, 3)) {
+  for (const ability of (input.draft?.jdInsight?.coreAbilities ?? []).slice(0, 3)) {
     questions.push({
       questionText: `JD 里要求「${ability}」，请用已确认简历快照中的事实说明匹配度。`,
       sourceType: "jd",
       sourceRef: ability,
+      favorite: false,
+      answerDraft: ""
+    });
+  }
+
+  if (!input.draft?.jdInsight?.coreAbilities?.length) {
+    questions.push({
+      questionText: `目前还没有补充 JD，请先说明自己对 ${input.record.company} 和 ${input.record.jobTitle} 的理解，以及为什么适合这个方向。`,
+      sourceType: "inferred",
+      sourceRef: input.record.company,
+      favorite: false,
+      answerDraft: ""
+    });
+    questions.push({
+      questionText: `如果面试官要求补充岗位相关案例，会优先讲哪一段经历？请按背景、动作、结果、复盘组织答案。`,
+      sourceType: "inferred",
+      sourceRef: input.record.jobTitle,
       favorite: false,
       answerDraft: ""
     });
@@ -378,14 +647,14 @@ function buildInterviewQuestions(
 function buildSelfIntroDraft(input: {
   company: string;
   jobTitle: string;
-  draft: NonNullable<Awaited<ReturnType<typeof readWorkspaceDraft>>>;
+  draft: Awaited<ReturnType<typeof readWorkspaceDraft>>;
   snapshot: ResumeDocument | null;
 }) {
-  const firstStrength = input.draft.analysis?.strengths?.[0];
-  const facts = input.draft.masterFactsUsed ?? [];
+  const firstStrength = input.draft?.analysis?.strengths?.[0];
+  const facts = input.draft?.masterFactsUsed ?? [];
   const leadingFact = facts[0];
   const snapshotEvidence = extractSnapshotLeadEvidence(input.snapshot);
-  const leadAbility = input.draft.jdInsight?.coreAbilities?.[0];
+  const leadAbility = input.draft?.jdInsight?.coreAbilities?.[0];
   const name = input.snapshot?.header.name ?? "OfferYou 用户";
 
   const lines = [
@@ -396,6 +665,34 @@ function buildSelfIntroDraft(input: {
   ];
 
   return lines.join("\n");
+}
+
+function buildFallbackRiskNotes(input: {
+  modelResult: Awaited<ReturnType<typeof buildInterviewPrepWithModel>> | null;
+  draft: Awaited<ReturnType<typeof readWorkspaceDraft>>;
+  evidence: InterviewEvidenceState;
+  modelFailureReason?: string;
+}) {
+  if (input.modelResult) {
+    return undefined;
+  }
+
+  if (input.modelFailureReason) {
+    if (input.evidence.hasSubstantialNotes || input.evidence.hasJD) {
+      return [
+        `模型调用失败，已临时生成基础准备版。${input.modelFailureReason}`,
+        input.evidence.hasSnapshot ? "当前已绑定简历快照。" : "当前没有绑定简历快照，部分问题不会引用个人经历。"
+      ];
+    }
+
+    return [`模型调用失败，已临时生成基础准备版。${input.modelFailureReason}`];
+  }
+
+  if (!input.draft) {
+    return ["模型暂不可用，且当前手动面试记录还没有绑定简历快照；建议补充 JD、公司信息或绑定简历后再生成更精准的面试准备。"];
+  }
+
+  return ["模型暂不可用，已使用模板生成面试准备。"];
 }
 
 function extractSnapshotLeadEvidence(snapshot: ResumeDocument | null) {
@@ -485,6 +782,8 @@ function renderInterviewQuestionSourceLabel(sourceType: InterviewQuestionSourceT
       return "快照";
     case "master_fact":
       return "事实";
+    case "basic":
+      return "基础题";
     default:
       return "推断";
   }

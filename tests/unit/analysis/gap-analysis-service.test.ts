@@ -40,7 +40,7 @@ describe("analyzeDraft", () => {
       calibratedResume: {
         status: "confirmed",
         personalInfo: {
-          name: "吴世阳"
+          name: "示例候选人"
         },
         entries: [
           {

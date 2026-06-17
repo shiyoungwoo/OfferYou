@@ -32,6 +32,8 @@ export async function callOpenAICompatible(options: OpenAICompatibleCallOptions)
     throw new Error("未检测到 OpenAI 兼容配置。");
   }
 
+  const timeoutMs = Number(process.env.OFFERYOU_MODEL_TIMEOUT_MS) || 45_000;
+
   const response = await fetch(`${trimTrailingSlash(config.baseUrl)}/chat/completions`, {
     method: "POST",
     headers: {
@@ -46,7 +48,8 @@ export async function callOpenAICompatible(options: OpenAICompatibleCallOptions)
       ],
       temperature: 0.2,
       ...(options.jsonMode ? { response_format: { type: "json_object" } } : {})
-    })
+    }),
+    signal: AbortSignal.timeout(timeoutMs)
   });
 
   if (!response.ok) {
@@ -72,7 +75,9 @@ export async function callOpenAICompatibleJSON<T = unknown>(
     const text = await callOpenAICompatible({ ...options, jsonMode: true });
     return parseLooseJSON<T>(text);
   } catch (error) {
-    console.error("[OpenAI Compatible JSON] Failed to parse response:", error);
+    if (process.env.OFFERYOU_DEBUG_AI === "1") {
+      console.error("[OpenAI Compatible JSON] Failed to parse response:", error);
+    }
     return null;
   }
 }

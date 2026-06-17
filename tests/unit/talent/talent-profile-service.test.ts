@@ -7,8 +7,11 @@ import { buildCareerNavigation } from "@/lib/services/talent/career-navigation";
 import {
   confirmCareerNavigation,
   confirmTalentProfile,
+  deleteTalentExcavationDraft,
+  getTalentExcavationDraft,
   getLatestConfirmedCareerNavigationForTalentProfile,
-  getLatestConfirmedTalentProfile
+  getLatestConfirmedTalentProfile,
+  saveTalentExcavationDraft
 } from "@/lib/services/talent/talent-profile-service";
 import { listMasterInsights } from "@/lib/services/master/master-service";
 
@@ -116,6 +119,29 @@ describe("talent-profile-service", () => {
     const latest = await getLatestConfirmedCareerNavigationForTalentProfile("default-user", "talent-profile-1");
 
     expect(latest).toBeNull();
+  });
+
+  it("saves, retrieves, and deletes a deep excavation draft", async () => {
+    await saveTalentExcavationDraft({
+      userId: "default-user",
+      turns: [
+        {
+          question: "第一轮问题",
+          answer: "第一轮回答里有非常具体的经历。",
+          requiredAnchor: "early_memory"
+        }
+      ],
+      updatedAt: "2026-06-15T00:00:00.000Z"
+    });
+
+    const draft = await getTalentExcavationDraft("default-user");
+
+    expect(draft?.turns).toHaveLength(1);
+    expect(draft?.turns[0]?.answer).toContain("具体的经历");
+
+    await deleteTalentExcavationDraft("default-user");
+
+    expect(await getTalentExcavationDraft("default-user")).toBeNull();
   });
 
   it("uses model output when available and saves high-confidence insights", async () => {

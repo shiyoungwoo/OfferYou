@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">OfferYou desktop icon</title>
+  <desc id="desc">OfferYou app icon sized to match the macOS desktop icon safe area</desc>
+  <g transform="translate(88 88) scale(10.6)">
+    <rect width="80" height="80" rx="18" fill="#1f7ae0" />
+    <circle cx="48" cy="26" r="16" stroke="white" stroke-width="2.5" fill="none" />
+    <circle cx="48" cy="26" r="10" stroke="white" stroke-width="2" fill="none" />
+    <circle cx="48" cy="26" r="4" fill="white" />
+    <line x1="30" y1="64" x2="30" y2="48" stroke="white" stroke-width="3" stroke-linecap="round" />
+    <line x1="30" y1="48" x2="20" y2="32" stroke="white" stroke-width="3" stroke-linecap="round" />
+    <line x1="30" y1="48" x2="42" y2="32" stroke="white" stroke-width="3" stroke-linecap="round" />
+  </g>
+</svg>

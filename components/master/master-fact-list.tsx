@@ -41,7 +41,7 @@ export function MasterFactList({ facts }: MasterFactListProps) {
                     </p>
                   ) : null}
                 </div>
-                <span className="text-xs uppercase tracking-[0.24em] text-slate-500">{fact.blockType}</span>
+                <span className="text-xs tracking-[0.18em] text-slate-500">{renderBlockType(fact.blockType)}</span>
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-700">{fact.summary}</p>
             </article>
@@ -54,4 +54,18 @@ export function MasterFactList({ facts }: MasterFactListProps) {
       </div>
     </section>
   );
+}
+
+function renderBlockType(blockType: MasterFactSummary["blockType"]) {
+  const labels: Record<MasterFactSummary["blockType"], string> = {
+    summary: "个人概览",
+    experience: "工作经历",
+    project: "项目经历",
+    education: "教育背景",
+    skill: "技能",
+    certificate: "证书",
+    other: "其他资料"
+  };
+
+  return labels[blockType];
 }

@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { saveWorkspaceDraft } from "@/lib/services/analysis/workspace-repository";
 import { generateSnapshotForDraft } from "@/lib/services/snapshot/snapshot-service";
 import { exportResumeDocumentForDraft } from "@/lib/services/export/resume-export-service";
-import { readApplicationRecord } from "@/lib/services/applications/application-record-service";
+import { listApplicationRecords } from "@/lib/services/applications/application-record-service";
+import { listResumeVersions } from "@/lib/services/resume/resume-version-service";
 
 let tempDir: string;
 let previousCwd: string;
@@ -64,16 +65,18 @@ describe("exportResumeDocumentForDraft", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("exports the current resume snapshot and creates an application record", async () => {
+  it("exports the current resume snapshot without creating an application record", async () => {
     const result = await exportResumeDocumentForDraft({
       draftId: "draft-1"
     });
 
-    const record = await readApplicationRecord(result.recordId);
+    const records = await listApplicationRecords();
+    const resumeVersions = await listResumeVersions("default-user");
 
-    expect(result.recordPath).toBe("/applications/draft-1/record");
     expect(result.storagePath.endsWith(".pdf")).toBe(true);
-    expect(record?.exportStoragePath).toBe(result.storagePath);
-    expect(record?.draftId).toBe("draft-1");
+    expect(records).toHaveLength(0);
+    expect(resumeVersions).toHaveLength(1);
+    expect(resumeVersions[0]?.draftId).toBe("draft-1");
+    expect(resumeVersions[0]?.sourceType).toBe("pdf_export");
   }, 15000);
 });

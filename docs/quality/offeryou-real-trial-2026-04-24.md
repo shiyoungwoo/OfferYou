@@ -16,7 +16,7 @@
 - Draft ID：2c134917-eef9-419b-bfc8-246b64f44533
 - 建议数量：3
 - 质量通过：3/3
-- PDF 路径：/private/tmp/superpowers/worktrees/OfferYou/phase3-batch28/docs/quality/offeryou-real-trial-artifacts/aipm/2133a9ce-493b-4534-9132-b0ffda549323-吴世阳-AI 就业指导产品经理-可投递版-20260424.pdf
+- PDF 路径：/private/tmp/superpowers/worktrees/OfferYou/phase3-batch28/docs/quality/offeryou-real-trial-artifacts/aipm/2133a9ce-493b-4534-9132-b0ffda549323-示例候选人-AI 就业指导产品经理-可投递版-20260424.pdf
 - Interview Prep：7 题（已持久化：是）
 
 ## 建议质量
@@ -45,14 +45,14 @@ AI 分析暂不可用，当前结果来自确定性规则，仅供参考。；�
 
 - 公司：高校 AI 就业指导
 - 岗位：AI 就业指导产品经理
-- 候选人：吴世阳
+- 候选人：示例候选人
 - 投递记录：59caac41-945a-4399-9b30-a2175324bf58
 - 问题总数：7
 - 收藏问题：0
 - 已填写答案：0
 
 ## 自我介绍草稿
-我是 吴世阳，最近主要在把真实经历整理成可投递、可解释的岗位快照。
+我是 示例候选人，最近主要在把真实经历整理成可投递、可解释的岗位快照。
 我的一个核心优势是：在这些关键词上具有高匹配度: ai, prompt。
 例如，我会用「OfferYou 真实试跑复盘」这类事实来说明我能做成什么。
 这次我关注 高校 AI 就业指导 的 AI 就业指导产品经理，因为这份岗位和我当前的能力主线匹配。

@@ -54,7 +54,7 @@ pnpm build
 - 小米 MiMo：推荐设置 `MIMO_API_KEY`、`MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1`，并设置 `DEFAULT_MODEL_PROVIDER=openai_compatible`。默认分层为：普通文本节点使用 `MIMO_MODEL_SIMPLE=mimo-v2.5`，复杂推理节点使用 `MIMO_MODEL_COMPLEX=mimo-v2.5-pro`，截图/视觉识别预留 `MIMO_MODEL_VISION=mimo-v2.5`。
 - OpenAI Codex OAuth：如需使用 OpenAI Codex 模型分层，可设置 `OPENAI_COMPATIBLE_FLAVOR=openai_codex`、`OPENAI_CODEX_ACCESS_TOKEN`、`OPENAI_CODEX_BASE_URL=https://api.openai.com/v1`。默认简单节点为 `OPENAI_CODEX_MODEL_SIMPLE=gpt-5.4-mini`，复杂节点为 `OPENAI_CODEX_MODEL_COMPLEX=gpt-5.5`；两个模型名均可通过环境变量覆盖，避免未来权限或模型 ID 变化影响主链路。
 - OpenAI 兼容模式：也支持 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`。
-- Gemini：仅作为可选旧接口，设置 `GEMINI_API_KEY`、可选设置 `GEMINI_MODEL` 后才会启用。
+- Google Gemini：设置 `GEMINI_API_KEY` 后启用。默认分层：简单任务使用 `GEMINI_MODEL_SIMPLE=gemini-2.5-flash`，复杂推理使用 `GEMINI_MODEL_COMPLEX=gemini-2.5-pro`，视觉任务使用 `GEMINI_MODEL_VISION=gemini-2.5-flash`。也兼容旧版 `GEMINI_MODEL` 环境变量。使用 `@google/genai` SDK（Gemini CLI 同款内核）。
 - 都未配置时只能进入基础编辑、规则参考和本地验证场景；不得把 `deterministic_fallback` 输出包装成正式 AI 改写。
 
 ## 模型能力说明
